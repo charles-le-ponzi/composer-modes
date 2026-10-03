@@ -217,7 +217,8 @@ const MODE_BG = {
   agent: 'var(--ui-control-active-background)',
   // debug 20% darker (contrast with the text); plan back to the accent blue.
   plan: 'var(--ui-accent)',
-  debug: 'color-mix(in srgb, var(--ui-red) 80%, #000)'
+  debug: 'color-mix(in srgb, var(--ui-red) 80%, #000)',
+  orchestrator: 'var(--ui-purple)'
 }
 
 /** Only files saved by /plan are accepted. Model output = untrusted. */
