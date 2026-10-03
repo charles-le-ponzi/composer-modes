@@ -28,6 +28,11 @@ import os
 import re
 from pathlib import PurePosixPath
 
+try:  # package context (real plugin load)
+    from .modes import role_from_goal
+except ImportError:  # top-level context (tests import enforce directly)
+    from modes import role_from_goal
+
 __all__ = [
     "ask_enforcement_enabled",
     "ask_block_message",
@@ -262,11 +267,6 @@ def plan_block_message(tool_name: str, args: object) -> str | None:
 #: The one state-changing tool orchestrator mode may call.
 _ORCH_DELEGATE_TOOL = "delegate_task"
 
-#: Every subagent goal must open with one of these role tags so the subagent
-#: knows its job. The role is the only "role" a subagent has — delegate_task
-#: takes no role parameter, it lives in the goal text.
-_ORCH_ROLE_RE = re.compile(r"^\s*\[ROLE:\s*(?:planner|implementer|debugger)\s*\]")
-
 #: Hard mutations orchestrator mode must never run. This is the mutating-token
 #: list MINUS the execution subcommands (npm test / npm run / python -c /
 #: node -e / cargo test / go test / ...) so the orchestrator can still run the
@@ -344,7 +344,7 @@ def orchestrator_block_message(tool_name: str, args: object) -> str | None:
         goals = _orch_task_goals(args)
         if not goals:
             return None  # unrecognized args shape — don't block on shape
-        missing = [g[:60] for g in goals if not _ORCH_ROLE_RE.match(g)]
+        missing = [g[:60] for g in goals if role_from_goal(g) is None]
         if missing:
             return (
                 "[composer-modes] Orchestrator mode: every subagent goal must begin with its "
