@@ -12,7 +12,10 @@ Registered surface
 ``pre_llm_call``    the active mode's operating note rides the turn (one-shot)
 ``pre_tool_call``   ask mode is enforced read-only; plan mode is read-only
                     except writing the plan markdown / questions JSON
-``/mode``           ``/mode ask|agent|plan|debug`` sets the default mode
+``subagent_start``  a delegated subagent's [ROLE: ...] goal tag becomes its
+                    mode (planner->plan, implementer->agent, debugger->debug),
+                    so the matching note is injected into the child's turn
+``/mode``           ``/mode ask|agent|plan|debug|orchestrator`` sets the default mode
 ``composer-modes:modes``  a skill describing the mode protocol (opt-in load)
 ``dashboard/plugin_api.py``  the REST namespace the desktop half talks to
 """
@@ -22,7 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import enforce
-from .modes import DEFAULT_MODE, LABELS, MODE_IDS, is_mode, is_slash_shaped, note_for
+from .modes import DEFAULT_MODE, LABELS, MODE_IDS, is_mode, is_slash_shaped, mode_for_goal, note_for
 from .store import load_store
 
 __all__ = ["register"]
@@ -91,6 +94,27 @@ def register(ctx):  # noqa: ANN001 - PluginContext from hermes_cli.plugins
         return None
 
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
+
+    # ── subagent roles: tag in the goal -> the child's mode at spawn ─────────
+    # The orchestrator's gate forces every delegate_task goal to open with a
+    # [ROLE: ...] tag. When Hermes spawns the child it fires subagent_start
+    # with the child's session id + goal; we map the tag to a mode so the
+    # matching operating note is injected into the subagent's first turn (and,
+    # for a planner, plan-mode enforcement keeps it read-only).
+    def on_subagent_start(child_session_id=None, child_goal=None, **kwargs):
+        try:
+            if not child_session_id:
+                return None
+            mode = mode_for_goal(child_goal)
+            if not mode:
+                return None  # no role tag (or unknown) — leave the child's default
+            store.set_mode(str(child_session_id), mode)
+            _emit(f"subagent-mode session={child_session_id} mode={mode}")
+        except Exception as exc:
+            _emit(f"subagent_start failed: {exc!r}")
+        return None
+
+    ctx.register_hook("subagent_start", on_subagent_start)
 
     # ── /mode on every surface (CLI, TUI, desktop composer, messaging) ──────
     def on_mode_command(raw_args: str = "") -> str:

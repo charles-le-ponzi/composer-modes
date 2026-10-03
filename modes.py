@@ -211,3 +211,37 @@ ORCH_NOTE = (
 )
 
 NOTES = {"ask": ASK_NOTE, "plan": PLAN_NOTE, "debug": DEBUG_NOTE, "orchestrator": ORCH_NOTE}
+
+
+# ── subagent roles ──────────────────────────────────────────────────────────
+# When the orchestrator dispatches a subagent, the goal must open with a role
+# tag ([ROLE: planner] / [ROLE: implementer] / [ROLE: debugger]) — enforced by
+# the orchestrator gate in enforce.py. At spawn, Hermes fires the
+# ``subagent_start`` lifecycle hook with the child's session id and goal; the
+# plugin parses the tag and sets the child's session mode so the matching
+# operating note is injected into the subagent's first turn. The mapping is
+# chosen so the child's mode also carries the right enforcement:
+#   planner     -> plan       read-only except writing plans (can't edit code)
+#   implementer -> agent      full tools (builds the plan)
+#   debugger    -> debug      full tools + the debugging note
+_ROLE_TAG_RE = re.compile(r"^\s*\[ROLE:\s*(planner|implementer|debugger)\s*\]", re.IGNORECASE)
+
+ROLE_TO_MODE = {
+    "planner": "plan",
+    "implementer": "agent",
+    "debugger": "debug",
+}
+
+
+def role_from_goal(goal: object) -> str | None:
+    """The role tag at the start of a subagent goal, or ``None`` if absent."""
+    if not isinstance(goal, str):
+        return None
+    match = _ROLE_TAG_RE.match(goal)
+    return match.group(1).lower() if match else None
+
+
+def mode_for_goal(goal: object) -> str | None:
+    """The composer mode a subagent should run in, derived from its goal tag."""
+    role = role_from_goal(goal)
+    return ROLE_TO_MODE.get(role) if role else None

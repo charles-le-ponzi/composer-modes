@@ -58,6 +58,24 @@ def test_orchestrator_note_mandates_delegation_and_mode_lock():
     assert "CANNOT change" in ORCH_NOTE  # the model cannot change its own mode
 
 
+# role tag -> mode mapping (drives the subagent_start handler)
+@pytest.mark.parametrize(
+    "goal,role,mode",
+    [
+        ("[ROLE: planner] Plan X.", "planner", "plan"),
+        ("[ROLE: implementer] Build X.", "implementer", "agent"),
+        ("[ROLE: debugger] Fix X.", "debugger", "debug"),
+        ("[role: DEBUGGER] Fix X.", "debugger", "debug"),  # case-insensitive
+        ("Plan X.", None, None),  # no tag
+        ("[ROLE: architect] X.", None, None),  # unknown role
+    ],
+)
+def test_role_and_mode_from_goal(goal, role, mode):
+    from modes import mode_for_goal, role_from_goal
+    assert role_from_goal(goal) == role
+    assert mode_for_goal(goal) == mode
+
+
 def test_debug_note_carries_the_loop_directive():
     assert '::debug-loop{round="1"}' in DEBUG_NOTE
     assert "Mark as fixed" in DEBUG_NOTE

@@ -8,15 +8,51 @@ from pathlib import Path
 
 from conftest import ROOT, FakeCtx
 
+import pytest
+
 from modes import ASK_NOTE
 
 
 def test_register_wires_hooks_command_and_skill(ctx):
     assert ctx.hooks["pre_llm_call"] and ctx.hooks["pre_tool_call"]
+    assert ctx.hooks["subagent_start"]
     assert "mode" in ctx.commands
     assert ctx.command_meta["mode"]["args_hint"] == "<ask|agent|plan|debug|orchestrator>"
     assert "modes" in ctx.skills
     assert ctx.skills["modes"].is_file()
+
+
+@pytest.mark.parametrize(
+    "goal,expected",
+    [
+        ("[ROLE: planner] Plan the feature.", "plan"),
+        ("[ROLE: implementer] Build it.", "agent"),
+        ("[ROLE: debugger] Fix the failing test.", "debug"),
+        ("[role: planner] lowercase tag.", "plan"),  # case-insensitive
+    ],
+)
+def test_subagent_start_sets_the_child_mode_from_the_role_tag(ctx, plugin, goal, expected):
+    store = plugin.store.load_store(plugin.PLUGIN_NAME)
+    handler = ctx.hooks["subagent_start"][0]
+    handler(child_session_id="child-1", child_goal=goal)
+    assert store.get_mode("child-1") == expected
+
+
+def test_subagent_start_without_a_role_tag_leaves_the_default(ctx, plugin):
+    store = plugin.store.load_store(plugin.PLUGIN_NAME)
+    ctx.hooks["subagent_start"][0](child_session_id="child-2", child_goal="Just do the thing.")
+    assert store.get_mode("child-2") == store.get_default()
+
+
+def test_subagent_start_with_no_session_id_is_a_noop(ctx, plugin):
+    ctx.hooks["subagent_start"][0](child_session_id=None, child_goal="[ROLE: planner] x")
+    assert True  # must not raise
+
+
+def test_subagent_start_unknown_role_leaves_the_default(ctx, plugin):
+    store = plugin.store.load_store(plugin.PLUGIN_NAME)
+    ctx.hooks["subagent_start"][0](child_session_id="child-3", child_goal="[ROLE: architect] x")
+    assert store.get_mode("child-3") == store.get_default()
 
 
 def test_ask_mode_frames_the_turn_with_the_note(ctx, plugin):

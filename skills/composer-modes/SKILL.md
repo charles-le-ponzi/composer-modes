@@ -52,6 +52,11 @@ Nothing is added. Answer normally with the full toolset.
   with a role tag — `[ROLE: planner]`, `[ROLE: implementer]` or
   `[ROLE: debugger]` — followed by that role's brief. A dispatch without a
   role tag is **blocked by the plugin**.
+- The role tag also sets the subagent's **mode** at spawn (via the
+  `subagent_start` hook): `planner` → plan mode (read-only, can only write
+  plans), `implementer` → agent mode (full tools), `debugger` → debug mode.
+  The matching mode note is injected into the subagent's first turn, so each
+  subagent operates under the right rules automatically.
 - You may run code/tests to verify and inspect read-only, but `write_file`,
   `patch`, and mutating terminal commands are **blocked by the plugin** (a
   blocked call returns a `[composer-modes]` message). Find a bug? Delegate it to
