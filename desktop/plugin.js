@@ -213,12 +213,12 @@ const MODES = [
 /** Button background per mode — direct CSS values (inline style): Tailwind classes with var()
  *  only exist if the app source uses them; inline does not depend on the compile. */
 const MODE_BG = {
-  // Tiles are darkened (color-mix with black) so the white glyphs stay legible.
-  ask: 'color-mix(in srgb, var(--ui-green) 65%, #000)',
+  // Tiles are darkened (color-mix with black) just enough to keep white glyphs legible.
+  ask: 'color-mix(in srgb, var(--ui-green) 80%, #000)',
   agent: 'var(--ui-control-active-background)',
-  plan: 'color-mix(in srgb, var(--ui-accent) 65%, #000)',
-  debug: 'color-mix(in srgb, var(--ui-red) 70%, #000)',
-  orchestrator: 'color-mix(in srgb, var(--ui-purple) 65%, #000)'
+  plan: 'color-mix(in srgb, var(--ui-accent) 80%, #000)',
+  debug: 'color-mix(in srgb, var(--ui-red) 85%, #000)',
+  orchestrator: 'color-mix(in srgb, var(--ui-purple) 80%, #000)'
 }
 
 /** Only files saved by /plan are accepted. Model output = untrusted. */
