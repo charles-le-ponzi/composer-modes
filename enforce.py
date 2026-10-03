@@ -262,6 +262,11 @@ def plan_block_message(tool_name: str, args: object) -> str | None:
 #: The one state-changing tool orchestrator mode may call.
 _ORCH_DELEGATE_TOOL = "delegate_task"
 
+#: Every subagent goal must open with one of these role tags so the subagent
+#: knows its job. The role is the only "role" a subagent has — delegate_task
+#: takes no role parameter, it lives in the goal text.
+_ORCH_ROLE_RE = re.compile(r"^\s*\[ROLE:\s*(?:planner|implementer|debugger)\s*\]")
+
 #: Hard mutations orchestrator mode must never run. This is the mutating-token
 #: list MINUS the execution subcommands (npm test / npm run / python -c /
 #: node -e / cargo test / go test / ...) so the orchestrator can still run the
@@ -310,6 +315,20 @@ def orchestrator_enforcement_enabled() -> bool:
     }
 
 
+def _orch_task_goals(args: object) -> list[str]:
+    """The goal strings of a delegate_task call (empty if the shape is unknown)."""
+    if not isinstance(args, dict):
+        return []
+    tasks = args.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    return [
+        str(t["goal"])
+        for t in tasks
+        if isinstance(t, dict) and isinstance(t.get("goal"), str)
+    ]
+
+
 def orchestrator_block_message(tool_name: str, args: object) -> str | None:
     """The block message for a tool call orchestrator mode must refuse, or ``None``."""
     if not orchestrator_enforcement_enabled():
@@ -322,6 +341,18 @@ def orchestrator_block_message(tool_name: str, args: object) -> str | None:
         "tell the user to re-ask in Agent mode."
     )
     if name == _ORCH_DELEGATE_TOOL:
+        goals = _orch_task_goals(args)
+        if not goals:
+            return None  # unrecognized args shape — don't block on shape
+        missing = [g[:60] for g in goals if not _ORCH_ROLE_RE.match(g)]
+        if missing:
+            return (
+                "[composer-modes] Orchestrator mode: every subagent goal must begin with its "
+                "role tag — [ROLE: planner], [ROLE: implementer] or [ROLE: debugger] — followed "
+                "by that role's brief, so the subagent knows its job. The dispatch was blocked "
+                "before any subagent ran. Re-send the delegate_task call with a role tag on "
+                "every goal. Offending goal(s): " + " | ".join(missing)
+            )
         return None
     if name == "terminal":
         command = ""

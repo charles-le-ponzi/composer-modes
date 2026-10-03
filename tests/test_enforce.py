@@ -235,7 +235,47 @@ def orch_enabled(monkeypatch):
 
 
 def test_orchestrator_allows_delegate_task(orch_enabled):
+    # no recognizable tasks → not blocked on shape
     assert orchestrator_block_message("delegate_task", {}) is None
+
+
+# every subagent goal must carry a role tag
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "[ROLE: planner] Produce a step-by-step plan for X.",
+        "[ROLE: implementer] Implement the plan at plans/x.md.",
+        "[ROLE: debugger] Find the root cause of the failing test.",
+    ],
+)
+def test_orchestrator_delegate_with_role_tag_passes(orch_enabled, goal):
+    assert orchestrator_block_message("delegate_task", {"tasks": [{"goal": goal}]}) is None
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "Produce a step-by-step plan for X.",  # no role tag
+        "Plan the feature.",  # role implied but not tagged
+        "[ROLE: architect] Design the system.",  # unknown role
+    ],
+)
+def test_orchestrator_delegate_without_role_tag_is_blocked(orch_enabled, goal):
+    message = orchestrator_block_message("delegate_task", {"tasks": [{"goal": goal}]})
+    assert message is not None
+    assert "role tag" in message
+
+
+def test_orchestrator_delegate_blocks_when_any_goal_lacks_a_role(orch_enabled):
+    args = {
+        "tasks": [
+            {"goal": "[ROLE: planner] Plan it."},
+            {"goal": "Build it."},
+        ]
+    }
+    message = orchestrator_block_message("delegate_task", args)
+    assert message is not None
+    assert "Build it." in message
 
 
 @pytest.mark.parametrize("tool", ["read_file", "search_files", "vision_analyze", "mystery_tool"])
