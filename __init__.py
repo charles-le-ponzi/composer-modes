@@ -81,6 +81,11 @@ def register(ctx):  # noqa: ANN001 - PluginContext from hermes_cli.plugins
                 if message:
                     _emit(f"plan-block tool={tool_name} session={session_id or '-'}")
                     return {"action": "block", "message": message}
+            elif mode == "orchestrator":
+                message = enforce.orchestrator_block_message(tool_name, args)
+                if message:
+                    _emit(f"orch-block tool={tool_name} session={session_id or '-'}")
+                    return {"action": "block", "message": message}
         except Exception as exc:
             _emit(f"pre_tool_call failed: {exc!r}")
         return None
@@ -108,8 +113,8 @@ def register(ctx):  # noqa: ANN001 - PluginContext from hermes_cli.plugins
     ctx.register_command(
         "mode",
         on_mode_command,
-        description="Set the default composer mode (ask | agent | plan | debug).",
-        args_hint="<ask|agent|plan|debug>",
+        description="Set the default composer mode (ask | agent | plan | debug | orchestrator).",
+        args_hint="<ask|agent|plan|debug|orchestrator>",
     )
 
     # ── the protocol as a loadable skill (explicit skill_view only) ─────────
