@@ -26,7 +26,7 @@ __all__ = ["DEFAULT_MODE", "ModeStore", "load_store", "STORE_MODULE_NAME"]
 STORE_MODULE_NAME = "composer_modes_store"
 
 DEFAULT_MODE = "agent"
-_VALID_MODES = ("ask", "agent", "plan", "debug")
+_VALID_MODES = ("ask", "agent", "plan", "debug", "orchestrator")
 
 #: Sessions untouched for this long are dropped on the next write.
 SESSION_TTL_SECONDS = 30 * 24 * 3600
