@@ -32,7 +32,7 @@ VERSION = "2.0.1"
 STORE_MODULE = "composer_modes_store"
 _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 
-MODES = ("ask", "agent", "plan", "debug")
+MODES = ("ask", "agent", "plan", "debug", "orchestrator")
 DEFAULT_MODE = "agent"
 
 router = APIRouter()
