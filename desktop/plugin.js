@@ -204,6 +204,7 @@ function probe(msg) {
 
 const MODES = [
   { id: 'plan', label: 'Plan', icon: 'checklist', hint: 'Write a plan only — no execution (/plan)' },
+  { id: 'orchestrator', label: 'Orchestrator', icon: 'organization', hint: 'Delegate to subagents: plan, build, verify, debug' },
   { id: 'agent', label: 'Agent', icon: 'hubot', hint: 'Full agentic mode (default)' },
   { id: 'debug', label: 'Debug', icon: 'debug-alt', hint: 'Systematic debugging: evidence first, then fix' },
   { id: 'ask', label: 'Ask', icon: 'comment-discussion', hint: 'Answer only — never edit files or run mutations' }
