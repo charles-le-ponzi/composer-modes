@@ -10,7 +10,8 @@ typed.
 Registered surface
 ------------------
 ``pre_llm_call``    the active mode's operating note rides the turn (one-shot)
-``pre_tool_call``   ask mode is enforced read-only (state-changing calls vetoed)
+``pre_tool_call``   ask mode is enforced read-only; plan mode is read-only
+                    except writing the plan markdown / questions JSON
 ``/mode``           ``/mode ask|agent|plan|debug`` sets the default mode
 ``composer-modes:modes``  a skill describing the mode protocol (opt-in load)
 ``dashboard/plugin_api.py``  the REST namespace the desktop half talks to
@@ -66,15 +67,20 @@ def register(ctx):  # noqa: ANN001 - PluginContext from hermes_cli.plugins
 
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
 
-    # ── ask mode is read-only, not only in the prompt ────────────────────────
+    # ── ask mode is read-only, and plan mode is read-only except the plans ──
     def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kwargs):
         try:
-            if store.get_mode(session_id) != "ask":
-                return None
-            message = enforce.ask_block_message(tool_name, args)
-            if message:
-                _emit(f"ask-block tool={tool_name} session={session_id or '-'}")
-                return {"action": "block", "message": message}
+            mode = store.get_mode(session_id)
+            if mode == "ask":
+                message = enforce.ask_block_message(tool_name, args)
+                if message:
+                    _emit(f"ask-block tool={tool_name} session={session_id or '-'}")
+                    return {"action": "block", "message": message}
+            elif mode == "plan":
+                message = enforce.plan_block_message(tool_name, args)
+                if message:
+                    _emit(f"plan-block tool={tool_name} session={session_id or '-'}")
+                    return {"action": "block", "message": message}
         except Exception as exc:
             _emit(f"pre_tool_call failed: {exc!r}")
         return None
@@ -119,7 +125,8 @@ def register(ctx):  # noqa: ANN001 - PluginContext from hermes_cli.plugins
 
     _emit(
         f"register ver=v{VERSION} default={store.get_default()} "
-        f"modes={','.join(MODE_IDS)} enforce={enforce.ask_enforcement_enabled()}"
+        f"modes={','.join(MODE_IDS)} enforce=ask:{int(enforce.ask_enforcement_enabled())},"
+        f"plan:{int(enforce.plan_enforcement_enabled())}"
     )
 
 

@@ -14,15 +14,26 @@ Policy (fail-closed, never fail-silent):
   note tells the model to answer and close with the mandated sentence.
 
 Nothing here is a sandbox: it is a policy gate for a mode the user chose. Set
-``HERMES_COMPOSER_MODES_ASK_ENFORCE=0`` to turn it off.
+``HERMES_COMPOSER_MODES_ASK_ENFORCE=0`` to turn ask enforcement off.
+
+Plan mode is read-only too — with one exception: the plan markdown file and
+the optional questions JSON, both under ``.hermes/plans/``. Everything else
+is judged exactly like ask mode. Set
+``HERMES_COMPOSER_MODES_PLAN_ENFORCE=0`` to turn it off.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from pathlib import PurePosixPath
 
-__all__ = ["ask_enforcement_enabled", "ask_block_message"]
+__all__ = [
+    "ask_enforcement_enabled",
+    "ask_block_message",
+    "plan_enforcement_enabled",
+    "plan_block_message",
+]
 
 #: Tools that always change state, whatever their arguments look like.
 DENY_TOOLS = frozenset(
@@ -144,5 +155,97 @@ def ask_block_message(tool_name: str, args: object) -> str | None:
             f"call was blocked before it ran. Nothing was written. Answer with the allowed "
             f"read-only work and end your reply with the mandated Ask closing sentence so the "
             f"user can re-ask in Agent mode."
+        )
+    return None
+
+
+# ── Plan mode ────────────────────────────────────────────────────────────────
+# Read-only, except writing the plan markdown and the optional questions JSON
+# under .hermes/plans/. Everything else is judged exactly like ask mode.
+
+#: Where plan mode may write, relative to the workspace root.
+PLAN_DIR = ".hermes/plans"
+
+#: The one terminal command plan mode may run that is not read-only: creating
+#: the plans directory.
+_PLAN_MKDIR_RE = re.compile(r"^\s*mkdir\s+(?:-p\s+)?\"?\.hermes/plans\"?\s*$")
+
+#: File-writing tools that plan mode may use for the plan files.
+_PLAN_FILE_TOOLS = frozenset({"write_file", "patch"})
+
+
+def plan_enforcement_enabled() -> bool:
+    """Plan-mode enforcement is on unless explicitly switched off."""
+    return str(os.environ.get("HERMES_COMPOSER_MODES_PLAN_ENFORCE", "1")).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _plan_path_allowed(path: object) -> bool:
+    """True when *path* resolves to inside ``.hermes/plans/``."""
+    if not isinstance(path, str) or not path.strip():
+        return False
+    p = path.strip()
+    if p.startswith(("/", "~")):
+        # Absolute / home paths can never be the workspace-relative plan file.
+        return False
+    # Resolve .. segments (no filesystem access) and require the plans prefix.
+    parts = PurePosixPath(p).parts
+    resolved: list[str] = []
+    for part in parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not resolved:
+                return False  # escaped above the workspace root
+            resolved.pop()
+        else:
+            resolved.append(part)
+    return len(resolved) > 2 and resolved[0] == ".hermes" and resolved[1] == "plans"
+
+
+def plan_block_message(tool_name: str, args: object) -> str | None:
+    """The block message for a tool call plan mode must refuse, or ``None``."""
+    if not plan_enforcement_enabled():
+        return None
+    if not tool_name:
+        return None
+    name = str(tool_name)
+    door_out = (
+        " If the request needs anything else, answer what you can with the allowed work and tell "
+        "the user to re-ask in Agent mode."
+    )
+    if name in _PLAN_FILE_TOOLS:
+        path = args.get("path") if isinstance(args, dict) else None
+        if _plan_path_allowed(path):
+            return None
+        return (
+            f"[composer-modes] Plan mode is read-only except the plan files: '{name}' was blocked "
+            f"because its target is not inside {PLAN_DIR}/. You may only write the plan markdown "
+            f"and the questions JSON under {PLAN_DIR}/ (e.g. {PLAN_DIR}/2026-01-01_120000-<slug>.md)."
+            + door_out
+        )
+    if name == "terminal":
+        command = ""
+        if isinstance(args, dict):
+            command = str(args.get("command") or "")
+        if command.strip() and _PLAN_MKDIR_RE.match(command):
+            return None
+        if _terminal_is_read_only(command):
+            return None
+        return (
+            f"[composer-modes] Plan mode is read-only: the terminal command was blocked because "
+            f"it is not a read-only inspection (and not `mkdir -p .hermes/plans`). Inspect with "
+            f"read-only commands; only the plan markdown and questions JSON under {PLAN_DIR}/ may "
+            f"be written." + door_out
+        )
+    if name in DENY_TOOLS or _MUTATING_NAME_RE.search(name):
+        return (
+            f"[composer-modes] Plan mode is read-only except the plan files: the tool '{name}' can "
+            f"change state, so the call was blocked before it ran. Nothing was written. Only the "
+            f"plan markdown and questions JSON under {PLAN_DIR}/ may be written." + door_out
         )
     return None

@@ -79,20 +79,32 @@ ASK_NOTE = (
     "something by mistake, stop, say so plainly, and do not continue."
 )
 
-PLAN_RULES = """For this turn, you are in PLAN MODE — planning only.
+PLAN_RULES = """For this turn, you are in PLAN MODE — planning only, and it is ENFORCED.
+
+This turn is read-only with exactly one exception: you may WRITE the plan
+markdown file (and, if you ask clarifying questions, the questions JSON) under
+`.hermes/plans/`. Every other state-changing action is BLOCKED by the runtime
+before it runs — the tools below will refuse, so do not attempt them:
 
 - Do not implement code.
-- Do not edit project files except the plan markdown file itself.
-- Do not run mutating terminal commands, commit, push, or perform external
-  actions.
-- You may inspect the repo or other context with read-only commands/tools
-  when needed.
-- Your deliverable is a markdown plan saved inside the active workspace under
-  `.hermes/plans/YYYY-MM-DD_HHMMSS-<slug>.md` (create the directory if
-  needed; Hermes file tools are backend-aware, so this relative path keeps
-  the plan with the workspace on local, docker, ssh, modal, and daytona
-  backends). If the runtime provides a specific target path, use that exact
-  path instead."""
+- Do not create, edit, rename, move or delete ANY file other than the plan
+  markdown / questions JSON under `.hermes/plans/`.
+- Do not run mutating terminal commands (no install, build, run, commit, push,
+  or anything that writes files). The only non-read-only command allowed is
+  `mkdir -p .hermes/plans`.
+- Do not perform external actions (no network writes, no package installs).
+
+What you MAY do: inspect the repo and other context with read-only
+commands/tools (cat, head, tail, grep, rg, find, ls, git status/log/diff/show,
+version checks, etc.) as much as you need.
+
+Your deliverable is a markdown plan saved inside the active workspace under
+`.hermes/plans/YYYY-MM-DD_HHMMSS-<slug>.md` (create the directory with
+`mkdir -p .hermes/plans` if needed; Hermes file tools are backend-aware, so this
+relative path keeps the plan with the workspace on local, docker, ssh, modal,
+and daytona backends). If the runtime provides a specific target path, use that
+exact path instead. Never claim or pretend to have done an action that was
+blocked."""
 
 PLAN_CRAFT = """Write the plan for an implementer with zero context for the codebase and
 questionable taste. A good plan makes implementation obvious — if someone has

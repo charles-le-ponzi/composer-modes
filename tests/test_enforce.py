@@ -115,3 +115,111 @@ def test_enforcement_can_be_switched_off(monkeypatch, value):
 def test_enforcement_is_on_by_default(monkeypatch, value):
     monkeypatch.setenv("HERMES_COMPOSER_MODES_ASK_ENFORCE", value)
     assert ask_enforcement_enabled()
+
+
+# ── Plan mode ────────────────────────────────────────────────────────────────
+from enforce import plan_block_message, plan_enforcement_enabled  # noqa: E402
+
+
+@pytest.fixture()
+def plan_enabled(monkeypatch):
+    monkeypatch.delenv("HERMES_COMPOSER_MODES_PLAN_ENFORCE", raising=False)
+
+
+# plan files are the one thing plan mode may write
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".hermes/plans/2026-01-01_120000-add-auth.md",
+        ".hermes/plans/2026-01-01_120000-add-auth-questions.json",
+        ".hermes/plans/sub/dir/plan.md",
+        ".hermes/plans/../plans/plan.md",  # resolves back into plans/
+    ],
+)
+def test_plan_file_writes_are_allowed(plan_enabled, path):
+    assert plan_block_message("write_file", {"path": path}) is None
+    assert plan_block_message("patch", {"path": path}) is None
+
+
+# writing anywhere else is blocked
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/models/user.py",
+        "README.md",
+        ".hermes/plans",  # the directory itself, not a file inside it
+        ".hermes/other/plan.md",
+        "plans/plan.md",  # missing the .hermes prefix
+        "../.hermes/plans/plan.md",  # escapes above the workspace root
+        "/home/user/.hermes/plans/plan.md",  # absolute
+        "~/.hermes/plans/plan.md",  # home-relative
+        "",
+        None,
+    ],
+)
+def test_non_plan_writes_are_blocked(plan_enabled, path):
+    assert plan_block_message("write_file", {"path": path}) is not None
+
+
+def test_plan_write_missing_path_is_blocked(plan_enabled):
+    assert plan_block_message("write_file", {}) is not None
+
+
+# other state-changing tools are blocked
+@pytest.mark.parametrize("tool", ["patch", "delegate_task", "memory", "cronjob_manage", "file_delete"])
+def test_plan_state_changing_tools_are_blocked(plan_enabled, tool):
+    assert plan_block_message(tool, {}) is not None
+
+
+# read-only tools pass
+@pytest.mark.parametrize("tool", ["read_file", "search_files", "vision_analyze", "mystery_tool"])
+def test_plan_read_only_tools_pass(plan_enabled, tool):
+    assert plan_block_message(tool, {}) is None
+
+
+# terminal: read-only + mkdir -p .hermes/plans pass, the rest is blocked
+@pytest.mark.parametrize(
+    "command",
+    ["ls -la", "git status", "cat README.md", "mkdir -p .hermes/plans", "mkdir .hermes/plans"],
+)
+def test_plan_allowed_terminal_commands(plan_enabled, command):
+    assert plan_block_message("terminal", {"command": command}) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm -rf build",
+        "echo hi > file.txt",
+        "npm install",
+        "git commit -m x",
+        "mkdir -p other",
+        "mkdir -p /tmp/plans",
+        "mkdir -p .hermes/plans && rm -rf x",
+        "",
+    ],
+)
+def test_plan_blocked_terminal_commands(plan_enabled, command):
+    assert plan_block_message("terminal", {"command": command}) is not None
+
+
+def test_plan_block_message_names_the_tool(plan_enabled):
+    message = plan_block_message("write_file", {"path": "src/x.py"})
+    assert message is not None
+    assert "write_file" in message
+    assert ".hermes/plans" in message
+
+
+# kill switch
+@pytest.mark.parametrize("value", ["0", "false", "off", "no"])
+def test_plan_enforcement_can_be_switched_off(monkeypatch, value):
+    monkeypatch.setenv("HERMES_COMPOSER_MODES_PLAN_ENFORCE", value)
+    assert not plan_enforcement_enabled()
+    assert plan_block_message("write_file", {"path": "src/x.py"}) is None
+    assert plan_block_message("terminal", {"command": "rm -rf dist"}) is None
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", ""])
+def test_plan_enforcement_is_on_by_default(monkeypatch, value):
+    monkeypatch.setenv("HERMES_COMPOSER_MODES_PLAN_ENFORCE", value)
+    assert plan_enforcement_enabled()
