@@ -203,14 +203,11 @@ function probe(msg) {
 }
 
 const MODES = [
-  { id: 'ask', label: 'Ask', icon: 'comment-discussion', hint: 'Answer only — never edit files or run mutations' },
-  { id: 'agent', label: 'Agent', icon: 'hubot', hint: 'Full agentic mode (default)' },
   { id: 'plan', label: 'Plan', icon: 'checklist', hint: 'Write a plan only — no execution (/plan)' },
-  { id: 'debug', label: 'Debug', icon: 'debug-alt', hint: 'Systematic debugging: evidence first, then fix' }
+  { id: 'agent', label: 'Agent', icon: 'hubot', hint: 'Full agentic mode (default)' },
+  { id: 'debug', label: 'Debug', icon: 'debug-alt', hint: 'Systematic debugging: evidence first, then fix' },
+  { id: 'ask', label: 'Ask', icon: 'comment-discussion', hint: 'Answer only — never edit files or run mutations' }
 ]
-// Dropdown display order (independent of the Shift+Tab cycle order above).
-const MODE_DISPLAY_ORDER = ['plan', 'agent', 'debug', 'ask']
-const MODES_DISPLAY = MODE_DISPLAY_ORDER.map((id) => MODES.find((m) => m.id === id)).filter(Boolean)
 
 /** Button background per mode — direct CSS values (inline style): Tailwind classes with var()
  *  only exist if the app source uses them; inline does not depend on the compile. */
@@ -1573,7 +1570,7 @@ export default {
               children: jsxs('div', {
                 role: 'menu',
                 'aria-label': 'Composer mode',
-                children: MODES_DISPLAY.map((m) => {
+                children: MODES.map((m) => {
                   const selected = m.id === mode
                   return jsx(
                     'button',
