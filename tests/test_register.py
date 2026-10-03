@@ -14,7 +14,7 @@ from modes import ASK_NOTE
 def test_register_wires_hooks_command_and_skill(ctx):
     assert ctx.hooks["pre_llm_call"] and ctx.hooks["pre_tool_call"]
     assert "mode" in ctx.commands
-    assert ctx.command_meta["mode"]["args_hint"] == "<ask|agent|plan|debug>"
+    assert ctx.command_meta["mode"]["args_hint"] == "<ask|agent|plan|debug|orchestrator>"
     assert "modes" in ctx.skills
     assert ctx.skills["modes"].is_file()
 

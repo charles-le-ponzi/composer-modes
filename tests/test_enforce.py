@@ -223,3 +223,87 @@ def test_plan_enforcement_can_be_switched_off(monkeypatch, value):
 def test_plan_enforcement_is_on_by_default(monkeypatch, value):
     monkeypatch.setenv("HERMES_COMPOSER_MODES_PLAN_ENFORCE", value)
     assert plan_enforcement_enabled()
+
+
+# ── Orchestrator mode ────────────────────────────────────────────────────────
+from enforce import orchestrator_block_message, orchestrator_enforcement_enabled  # noqa: E402
+
+
+@pytest.fixture()
+def orch_enabled(monkeypatch):
+    monkeypatch.delenv("HERMES_COMPOSER_MODES_ORCHESTRATE_ENFORCE", raising=False)
+
+
+def test_orchestrator_allows_delegate_task(orch_enabled):
+    assert orchestrator_block_message("delegate_task", {}) is None
+
+
+@pytest.mark.parametrize("tool", ["read_file", "search_files", "vision_analyze", "mystery_tool"])
+def test_orchestrator_read_only_tools_pass(orch_enabled, tool):
+    assert orchestrator_block_message(tool, {}) is None
+
+
+@pytest.mark.parametrize("tool", ["write_file", "patch", "memory", "cronjob_manage", "file_delete"])
+def test_orchestrator_state_changing_tools_blocked(orch_enabled, tool):
+    assert orchestrator_block_message(tool, {}) is not None
+
+
+# the orchestrator MAY run code and tests to verify
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python -m pytest -q",
+        "pytest tests/",
+        "npm test",
+        "npm run test",
+        "node src/index.js",
+        "python src/main.py",
+        "cargo test",
+        "go test ./...",
+        "ls -la",
+        "git status",
+        "cat README.md",
+    ],
+)
+def test_orchestrator_execution_and_read_only_pass(orch_enabled, command):
+    assert orchestrator_block_message("terminal", {"command": command}) is None
+
+
+# the orchestrator must NOT mutate the workspace
+@pytest.mark.parametrize(
+    "command",
+    [
+        "npm install",
+        "pip install requests",
+        "rm -rf dist",
+        "echo x > f.py",
+        "sed -i 's/a/b/' f.py",
+        "git commit -m x",
+        "git push",
+        "mv a b",
+        "mkdir build",
+        "sudo apt update",
+        "docker build -t x .",
+        "",
+    ],
+)
+def test_orchestrator_mutations_blocked(orch_enabled, command):
+    assert orchestrator_block_message("terminal", {"command": command}) is not None
+
+
+def test_orchestrator_block_message_is_a_reminder(orch_enabled):
+    # the block message must explain WHY it wasn't permitted and suggest an
+    # alternative — this is the injected reminder on a disallowed action
+    message = orchestrator_block_message("write_file", {})
+    assert message is not None
+    assert "write_file" in message
+    assert "blocked" in message.lower()  # why: the call was refused
+    assert "delegate" in message.lower()  # what to do instead
+
+
+@pytest.mark.parametrize("value", ["0", "false", "off", "no"])
+def test_orchestrator_enforcement_can_be_switched_off(monkeypatch, value):
+    monkeypatch.setenv("HERMES_COMPOSER_MODES_ORCHESTRATE_ENFORCE", value)
+    assert not orchestrator_enforcement_enabled()
+    assert orchestrator_block_message("write_file", {}) is None
+    assert orchestrator_block_message("terminal", {"command": "rm -rf x"}) is None

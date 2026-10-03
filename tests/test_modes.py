@@ -19,7 +19,7 @@ from modes import (
 
 def test_every_mode_has_a_label_and_agent_is_the_default():
     assert DEFAULT_MODE == "agent"
-    assert set(MODE_IDS) == {"ask", "agent", "plan", "debug"}
+    assert set(MODE_IDS) == {"ask", "agent", "plan", "debug", "orchestrator"}
     assert set(LABELS) == set(MODE_IDS)
 
 
@@ -30,7 +30,7 @@ def test_agent_and_unknown_modes_carry_no_note():
     assert note_for(7) is None
 
 
-@pytest.mark.parametrize("mode", ["ask", "plan", "debug"])
+@pytest.mark.parametrize("mode", ["ask", "plan", "debug", "orchestrator"])
 def test_notes_are_non_empty_and_tagged(mode):
     note = note_for(mode)
     assert note and note.startswith(f"[mode:{mode}]") or note.startswith("[/plan")
@@ -50,13 +50,20 @@ def test_plan_note_carries_the_approval_and_questions_directives():
     assert ".hermes/plans/" in PLAN_NOTE
 
 
+def test_orchestrator_note_mandates_delegation_and_mode_lock():
+    from modes import ORCH_NOTE
+    assert "delegate_task" in ORCH_NOTE
+    assert "SEQUENTIAL" in ORCH_NOTE
+    assert "CANNOT change" in ORCH_NOTE  # the model cannot change its own mode
+
+
 def test_debug_note_carries_the_loop_directive():
     assert '::debug-loop{round="1"}' in DEBUG_NOTE
     assert "Mark as fixed" in DEBUG_NOTE
 
 
 def test_notes_map_covers_exactly_the_non_agent_modes():
-    assert set(NOTES) == {"ask", "plan", "debug"}
+    assert set(NOTES) == {"ask", "plan", "debug", "orchestrator"}
 
 
 @pytest.mark.parametrize(

@@ -77,6 +77,13 @@ def test_invalid_modes_are_rejected(store):
         store.set_mode("s", "banana")
 
 
+def test_orchestrator_is_a_valid_mode(store):
+    store.set_mode("orch-sess", "orchestrator")
+    assert store.get_mode("orch-sess") == "orchestrator"
+    store.set_default("orchestrator")
+    assert store.get_default() == "orchestrator"
+
+
 def test_clear_session_drops_only_that_pin(store):
     store.set_mode("s", "ask")
     store.clear_session("s")
