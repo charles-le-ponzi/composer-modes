@@ -221,6 +221,16 @@ const MODE_BG = {
   orchestrator: 'var(--ui-purple)'
 }
 
+// Icon glyph color per mode. White washes out on the colored tiles, so those
+// get a dark glyph; agent's tile is already dark, so it keeps the white glyph.
+const MODE_ICON = {
+  ask: '#0a0a0a',
+  agent: 'var(--ui-text-primary)',
+  plan: '#0a0a0a',
+  debug: '#0a0a0a',
+  orchestrator: '#0a0a0a'
+}
+
 /** Only files saved by /plan are accepted. Model output = untrusted. */
 const PLAN_FILE_RE = /^\.hermes\/plans\/[A-Za-z0-9._-]+\.md$/
 
@@ -1557,7 +1567,7 @@ export default {
                     color: 'var(--ui-text-primary)'
                   },
                   children: [
-                    jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0' }),
+                    jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0', style: { color: MODE_ICON[current.id] || MODE_ICON.agent } }),
                     current.label,
                     jsx(Codicon, { key: 'c', name: 'chevron-down', size: '0.625rem', className: 'shrink-0 opacity-60' })
                   ]
@@ -1593,7 +1603,7 @@ export default {
                           key: 'dot',
                           className: 'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded',
                           style: { backgroundColor: MODE_BG[m.id] || MODE_BG.agent },
-                          children: jsx(Codicon, { name: m.icon, size: '0.625rem', className: 'shrink-0' })
+                          children: jsx(Codicon, { name: m.icon, size: '0.625rem', className: 'shrink-0', style: { color: MODE_ICON[m.id] || MODE_ICON.agent } })
                         }),
                         jsxs('span', {
                           key: 'txt',
