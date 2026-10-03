@@ -11,6 +11,7 @@ __pycache__/
 # local install artifacts (never commit)
 composer-modes-patch-manifest.json
 install.lock
+.hermes-catalog.json
 
 # environments
 .venv/

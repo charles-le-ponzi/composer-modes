@@ -871,7 +871,7 @@ export default {
                   probe('click copy')
                   try {
                     void ctx.os.writeClipboard(file)
-                    notifySafe({ kind: 'info', message: 'Path del plan copiado.' })
+                    notifySafe({ kind: 'info', message: 'Plan path copied.' })
                   } catch (_) {
                     /* clipboard best-effort */
                   }
@@ -899,7 +899,7 @@ export default {
                     size: '0.75rem',
                     className: 'mr-1 shrink-0'
                   }),
-                  reading ? 'Cerrar plan' : 'Leer plan'
+                  reading ? 'Close plan' : 'Read plan'
                 ]
               })
             ]
@@ -942,7 +942,7 @@ export default {
                         probe(`close reason=cancel file=${file}`)
                         setEntry({ open: false })
                       },
-                      children: 'Cancelar'
+                      children: 'Cancel'
                     }),
                     jsx(Button, {
                       key: 'send',
@@ -973,7 +973,7 @@ export default {
       }
     })
 
-    // ── Tarjeta de preguntas del plan (v10.10) — stepper dentro de la familia ──
+    // ── Plan questions card (v10.10) — stepper within the family ──
     function PlanQuestionsCard({ file }) {
       const all = useValue(planQState)
       const entry = (file && all[file]) || EMPTY_Q
