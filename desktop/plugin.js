@@ -737,17 +737,6 @@ export default {
       )
     }
 
-    ctx.i18n.register({
-      en: {
-        modesLabel: 'Mode',
-        tip: mode => `${mode} mode active`
-      },
-      es: {
-        modesLabel: 'Mode',
-        tip: mode => `${mode} mode active`
-      }
-    })
-
     // Restore the persisted mode (sync API: get(key, fallback) → value).
     const savedMode = ctx.storage.get('mode', 'agent')
     if (MODES.some((m) => m.id === savedMode)) activeMode.set(savedMode)
