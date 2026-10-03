@@ -1,124 +1,125 @@
 /**
  * composer-modes — Cursor-style mode selector for the Hermes composer. v13.1.
  *
- * Botón único de modos en la tira del composer (ask/agent/plan/debug). Un ComposerMiddleware
- * adjunta el FRAME del modo al draft (v12.0: `mode` + `note` como DATO, sin RPC): el shell manda
- * `note` en prompt.submit y el core la fusiona SOLO en los bytes al modelo (api_content) — la
- * burbuja muestra solo lo tipeado. La cola CONGELA el frame por entrada al encolar; los drenes
- * pasan `fromQueue` y el middleware no re-deriva jamás.
- *   ask   → solo lectura (nota)      agent → sin nota (mode sella igual)
- *   plan  → reglas + directiva `::plan-approve{file="..."}` (nota)
- *   debug → debugging sistemático en 3 fases (nota)
+ * A single mode button in the composer bar (ask/agent/plan/debug). A ComposerMiddleware
+ * attaches the mode's FRAME to the draft (v12.0: `mode` + `note` as DATA, no RPC): the shell
+ * sends `note` in prompt.submit and the core merges it ONLY into the model-facing bytes
+ * (api_content) — the bubble shows only what was typed. The queue FREEZES the frame per
+ * entry on enqueue; drains pass `fromQueue` and the middleware never re-derives.
+ *   ask   → read-only (note)      agent → no note (mode still sealed)
+ *   plan  → rules + `::plan-approve{file="..."}` directive (note)
+ *   debug → systematic debugging in 3 phases (note)
  *
- * La tarjeta PlanApproveCard (directiva ::plan-approve) da 3 salidas:
- *   a. Implementar ahora → prompt.submit con el path del plan
- *   b. Modificar → editor inline (campo vacío) → prompt.submit con cambios
- *   c. Seguir en el prompt → el usuario escribe en la caja (modo ya reseteado)
+ * The PlanApproveCard (::plan-approve directive) offers 3 exits:
+ *   a. Implement now → prompt.submit with the plan path
+ *   b. Modify → inline editor (empty field) → prompt.submit with changes
+ *   c. Continue in the prompt → the user types in the box (mode already reset)
  *
- * Endurecido v5 (consejo CMPA-2026-09-10-V5B, consenso 100/100/100):
- *   - estado (open/draft) espejado en ctx.storage `planDialogsV5` + rehidratado
- *     en cada evaluación del módulo → sobrevive hot-reload y recargas.
- *     `sending` JAMÁS se rehidrata (transitorio; un flag viejo bloquearía todo).
- *   - sondas console.error('[cm-pa] …') — único nivel que desktop.log captura.
- *   - marcador visible `v5·<bootId>` en tarjeta + pills.
- *   - ctx.onDispose para listener, flush y debounce.
+ * Hardened v5 (advice CMPA-2026-09-10-V5B, consensus 100/100/100):
+ *   - state (open/draft) mirrored in ctx.storage `planDialogsV5` + rehydrated
+ *     on every module evaluation → survives hot-reload and reloads.
+ *     `sending` is NEVER rehydrated (transient; a stale flag would block everything).
+ *   - probes via console.error('[cm-pa] …') — the only level desktop.log captures.
+ *   - visible marker `v5·<bootId>` on card + pills.
+ *   - ctx.onDispose for listener, flush and debounce.
  *
- * v6: bucle de debug (tarjeta ::debug-loop → botones Mark as fixed / still not working).
- * v7 (consejo MODEK-2026-09-10-V7B): Shift+Tab cicla los modos — listener en window
- *   con capture, scope composer/transcript (+body); skips en terminal y overlays con rol;
- *   no rebindable en v1 (el gate actionAllowedInInput bloquea combos shift-only en editables).
- * v8 (consejo MODIC-2026-09-10-V10B): íconos codicon en los pills — comment-discussion (ask),
- *   hubot (agent), checklist (plan), debug-alt (debug) — Codicon del SDK a 0.75rem + shrink-0.
- * v9 (consejo MODOR-2026-09-10-V9B): burbujas limpias — el texto del usuario va PRIMERO; la nota
- *   del modo al final con 3 líneas vacías (bajo el pliegue de 4 líneas + fade del clamp). plan ya
- *   no usa el builtin /plan: payload propio con réplica verbatim de las reglas (re-sync con
- *   agent/plan_prompt.py). Guardas: slash explícito gana; idempotencia por sufijo exacto.
- *   LÍMITE conocido: mientras el agente trabaja, el Enter simple del composer va por el steer del
- *   desktop (session.redirect), que NO pasa por el middleware → ese envío sale sin framing.
- *   Ctrl/Cmd+Enter (cola) sí conserva el modo al drenar. Cada wrap emite sonda `mw ...`.
- *   SUPERADO por v11.0: la nota ya no vive en el texto — viaja oculta por `session.note.stage`.
- * v10 (consejo MODEB-2026-09-11-V10): botón único de modo en el composer — muestra el modo actual
- *   (ícono + label + chevron) y cicla con clic usando el mismo cycleMode que Shift+Tab. Sesión
- *   nueva arranca en Agent (reset ante cambio de sesión; el nacimiento desde borrador null a id
- *   NO resetea, y el modo elegido en un borrador sobrevive al primer envío).
- * v10.1: color por modo en el botón — ask verde, agent gris (control activo), plan naranja,
- *   debug rojo — tokens --ui-green / --ui-red / --ui-orange + --ui-control-active-background.
- * v10.2: colores por style inline (var CSS) — Tailwind solo compila clases presentes en el fuente
- *   de la app: bg-(--ui-red)/bg-(--ui-orange) del plugin no generaban regla (botón transparente).
- * v10.3 (ronda debug 2026-09-11): plan y debug 20% más oscuros (color-mix 80/20 con negro) para
- *   diferenciarse mejor y dar contraste al texto; sonda temporal `modebtn ... bg=...` (se retira
- *   con el turno de limpieza del bucle de debug).
- * v10.4: plan vuelve a azul (var(--ui-accent), como antes de los colores por modo); sonda de
- *   diagnóstico retirada (cierre del bucle de debug sin 'Mark as fixed').
- * v10.5: marcas persistentes de los botones de tarjeta (plan: Implementar/Modificar; debug:
- *   retry/fixed) espejadas en ctx.storage. Límites: locales a la máquina; sin unmark/undo;
- *   marca transitoria best-effort — un click durante el turno vivo (id efímero
- *   assistant-stream-…) no sobrevive la re-hidratación (los planes quedan a salvo por el
- *   alias f:); el alias f: comparte la marca entre todas las tarjetas del mismo plan;
- *   colisión teórica de la clave ts|rol (los timestamps en µs la hacen casi imposible);
- *   keys huérfanas inertes tras borrar sesiones; storage.clear() ignorado (evento key null).
- * v10.6: botón 'Leer plan' (4º) en la tarjeta de plan — panel lector dockeado a la derecha
- *   (host.openWorkspace id 'composer-modes:plan-reader', markdown con Streamdown, lectura local vía
- *   window.hermesDesktop.readFileText; sondas planview *). Límites: lee la máquina local
- *   (en remoto degrada con error visible); fallback a submit oculto (display_kind hidden)
- *   disparando desktop_preview si falta el seam o no hay cwd.
- * v10.7: respiro visual (mt-3 ≈ un salto de línea) entre el último texto del mensaje y las
- *   tarjetas de plan y debug — nada encimado (pedido del usuario).
- * v10.8: toggle del lector en el botón de la tarjeta — 'Leer plan' abre / 'Cerrar plan' cierra el panel
- *   (host.paneVisibility del pane 'plugin-workspace:composer-modes:plan-reader' Y archivo de la tarjeta;
- *   self-healing en X/⌘W/reload; Cerrar nunca se bloquea por envío; sin persistencia). Id del pane
- *   renombrado a namespaced 'composer-modes:plan-reader' (convención <pluginId>:<paneId>).
- * v10.9: tick del check DENTRO del botón (primer hijo, patrón del ícono del read) y marca 'edit' (Modificar)
- *   recién al presionar 'Enviar cambios' (probe -> fresh -> applyMark -> sendTurn; rollback solo si la marca era
- *   nueva); purga one-time de las marcas ':plan:edit' falsas que dejó v10.8 (flag marksPurgeV9).
- * v10.10: dialog de preguntas del modo plan — ante ambigüedad MATERIAL el agente escribe
- *   .hermes/plans/<ts>-<slug>-questions.json y emite ::plan-questions{file="..."} como único párrafo;
- *   card stepper ('Preguntas sobre el plan — i/n', una por pantalla, opción libre SIEMPRE, Atrás/Siguiente,
- *   envío único con las respuestas + instrucción de continuar); auto-reset propio con toast correcto.
- * v10.11: 3 fixes UX del stepper (pedido del usuario) — auto-avance al click de opción con beat de 200 ms
- *   (la selección se pinta antes de avanzar) + guard anti-doble-click de 300 ms (swallow silencioso, sin
- *   disabled); filas verticales full-width livianas (variant ghost, numeradas 'N. texto' mismo color,
- *   'Otra respuesta…' = n+1) con selección resaltada (clases + style inline por la lección v10.2);
- *   haptic('selection') en picks aceptados (best-effort). Cancelación del beat en Atrás/Siguiente/Otra/
- *   unmount. Límites v1: focus post-avance y aria-live = v1.1; válvula a 450 ms si aparecen saltos.
- * v11.0 (consejo HIDE-2026-09-11-V17, CONSENSO_100): ocultamiento REAL de las notas — el
- *   middleware ya no appendea texto: la nota viaja con `session.note.stage` (one-shot, TTL 30 s)
- *   y el core la fusiona SOLO en api_content (burbuja = texto exacto del usuario; historial,
- *   copy y editor limpios; el clamp CSS deja de ser el mecanismo). Límites v1: steer (Enter con
- *   agente ocupado) pierde la nota — usar Ctrl/Cmd+Enter (cola); primer envío de un chat nuevo
- *   sin sessionId → nota skipped (probe); backend viejo ignora el stage (probe err, modo inerte);
- *   el param nativo draft.note (sin RPC) queda para la etapa B con rebuild de la app.
- * v12.0 (consejo QUEUEFREEZE-2026-09-11-V18, CONSENSO_100): el modo se CONGELA por mensaje
- *   encolado — el middleware adjunta `mode` (+ `note`) al draft como dato; el shell lo reenvía
- *   como `note` de prompt.submit; la cola captura el frame en la ENTRADA (chain corrido una vez
- *   en queueCurrentDraft) y los drenes (foreground, fondo, send-now) pasan `fromQueue` + la nota
- *   congelada sin re-derivar. El stage RPC se RETIRA del plugin (el core lo mantiene para
- *   ventanas viejas; min-build: shell con `draft.note`). Límites v1: todo steer/redirect sin nota
- *   (Enter-while-busy directo, fallback y steer-now) — paridad v11, follow-up 'session.redirect
- *   note'; entradas pre-v12 sin frame drenan sin nota; chip de modo en la fila de cola (label
- *   neutro, sin glifos).
- * v12.2 (consejo REPO-2026-09-11-V1): "estaciona siempre" — vuelve el stage best-effort del v11
- *   (`session.note.stage`, try/catch, sin sonda nueva) EN PARALELO al `note` del draft. Un solo
- *   plugin cubre: app nueva + core parcheado (draft.note gana; la estacionada se popea); app stock
- *   + core parcheado (solo el stage entrega); app stock sin parche (nada viaja, degradación
- *   silenciosa). El stage dispara SOLO en la derivación fresca (jamás en drains `fromQueue`),
- *   ANTES del return de la cadena, y usa el sid de v11 (focused → active).
+ * v6: debug loop (card ::debug-loop → buttons Mark as fixed / still not working).
+ * v7 (advice MODEK-2026-09-10-V7B): Shift+Tab cycles the modes — listener on window
+ *   with capture, scope composer/transcript (+body); skips in terminal and overlays with role;
+ *   not rebindable in v1 (the gate actionAllowedInInput blocks shift-only combos in editables).
+ * v8 (advice MODIC-2026-09-10-V10B): codicon icons on the pills — comment-discussion (ask),
+ *   hubot (agent), checklist (plan), debug-alt (debug) — SDK Codicon at 0.75rem + shrink-0.
+ * v9 (advice MODOR-2026-09-10-V9B): clean bubbles — the user's text goes FIRST; the mode
+ *   note at the end with 3 blank lines (below the 4-line fold + clamp fade). plan no
+ *   longer uses the builtin /plan: own payload with a verbatim replica of the rules (re-sync
+ *   with agent/plan_prompt.py). Guards: explicit slash wins; idempotency by exact suffix.
+ *   KNOWN LIMIT: while the agent works, a plain Enter in the composer goes through the
+ *   desktop steer (session.redirect), which does NOT pass through the middleware → that send
+ *   goes out unframed. Ctrl/Cmd+Enter (queue) does keep the mode at drain. Each wrap emits a
+ *   probe `mw ...`. SUPERSEDED by v11.0: the note no longer lives in the text — it travels
+ *   hidden via `session.note.stage`.
+ * v10 (advice MODEB-2026-09-11-V10): single mode button in the composer — shows the current
+ *   mode (icon + label + chevron) and cycles on click using the same cycleMode as Shift+Tab.
+ *   A new session starts in Agent (reset on session change; the birth from draft null to id
+ *   does NOT reset, and the mode chosen in a draft survives the first send).
+ * v10.1: per-mode color on the button — ask green, agent gray (active control), plan orange,
+ *   debug red — tokens --ui-green / --ui-red / --ui-orange + --ui-control-active-background.
+ * v10.2: colors via inline style (CSS var) — Tailwind only compiles classes present in the
+ *   app source: the plugin's bg-(--ui-red)/bg-(--ui-orange) generated no rule (transparent button).
+ * v10.3 (debug round 2026-09-11): plan and debug 20% darker (color-mix 80/20 with black) to
+ *   differentiate better and give the text contrast; temporary probe `modebtn ... bg=...` (removed
+ *   with the cleanup turn of the debug loop).
+ * v10.4: plan back to blue (var(--ui-accent), as before the per-mode colors); diagnostic
+ *   probe removed (closing the debug loop without 'Mark as fixed').
+ * v10.5: persistent marks of the card buttons (plan: Implement/Modify; debug:
+ *   retry/fixed) mirrored in ctx.storage. Limits: local to the machine; no unmark/undo;
+ *   transient mark best-effort — a click during the live turn (ephemeral id
+ *   assistant-stream-…) does not survive rehydration (the plans are safe via the
+ *   f: alias); the f: alias shares the mark across all cards of the same plan;
+ *   theoretical collision of the ts|role key (µs timestamps make it near impossible);
+ *   orphaned keys inert after deleting sessions; storage.clear() ignored (event key null).
+ * v10.6: 'Read plan' button (4th) on the plan card — reader pane docked to the right
+ *   (host.openWorkspace id 'composer-modes:plan-reader', markdown via Streamdown, local read via
+ *   window.hermesDesktop.readFileText; probes planview *). Limits: reads the local machine
+ *   (on remote it degrades with a visible error); fallback to a hidden submit (display_kind hidden)
+ *   triggering desktop_preview if the seam is missing or there is no cwd.
+ * v10.7: visual breathing room (mt-3 ≈ a line break) between the last message text and the
+ *   plan and debug cards — nothing overlapping (user request).
+ * v10.8: reader toggle on the card button — 'Read plan' opens / 'Close plan' closes the pane
+ *   (host.paneVisibility of the pane 'plugin-workspace:composer-modes:plan-reader' AND the card's file;
+ *   self-healing on X/⌘W/reload; Close is never blocked by a send; no persistence). Pane id
+ *   renamed to namespaced 'composer-modes:plan-reader' (convention <pluginId>:<paneId>).
+ * v10.9: check tick INSIDE the button (first child, same pattern as the read icon) and the 'edit' (Modify)
+ *   mark only when pressing 'Send changes' (probe -> fresh -> applyMark -> sendTurn; rollback only if the mark was
+ *   new); one-time purge of the false ':plan:edit' marks left by v10.8 (flag marksPurgeV9).
+ * v10.10: plan-mode questions dialog — on MATERIAL ambiguity the agent writes
+ *   .hermes/plans/<ts>-<slug>-questions.json and emits ::plan-questions{file="..."} as the only paragraph;
+ *   card stepper ('Questions about the plan — i/n', one per screen, free option ALWAYS, Back/Next,
+ *   single send with the answers + a continue instruction); own auto-reset with the right toast.
+ * v10.11: 3 UX fixes to the stepper (user request) — auto-advance on option click with a 200 ms beat
+ *   (the selection is painted before advancing) + anti-double-click guard of 300 ms (silent swallow, no
+ *   disabled); light full-width vertical rows (ghost variant, numbered 'N. text' same color,
+ *   'Other answer…' = n+1) with highlighted selection (classes + inline style per the v10.2 lesson);
+ *   haptic('selection') on accepted picks (best-effort). Beat cancellation on Back/Next/Other/
+ *   unmount. v1 limits: post-advance focus and aria-live = v1.1; valve to 450 ms if jumps appear.
+ * v11.0 (advice HIDE-2026-09-11-V17, CONSENSUS_100): REAL hiding of the notes — the
+ *   middleware no longer appends text: the note travels with `session.note.stage` (one-shot, TTL 30 s)
+ *   and the core merges it ONLY into api_content (bubble = the user's exact text; history,
+ *   copy and editor clean; the CSS clamp stops being the mechanism). v1 limits: steer (Enter with
+ *   agent busy) loses the note — use Ctrl/Cmd+Enter (queue); first send of a new chat
+ *   without sessionId → note skipped (probe); old backend ignores the stage (probe err, mode inert);
+ *   the native draft.note param (no RPC) is kept for stage B with an app rebuild.
+ * v12.0 (advice QUEUEFREEZE-2026-09-11-V18, CONSENSO_100): the mode is FROZEN per queued
+ *   message — the middleware attaches `mode` (+ `note`) to the draft as data; the shell re-sends it
+ *   as the `note` of prompt.submit; the queue captures the frame at the ENTRY (chain run once
+ *   in queueCurrentDraft) and the drains (foreground, background, send-now) pass `fromQueue` + the
+ *   frozen note without re-deriving. The stage RPC is REMOVED from the plugin (the core keeps it for
+ *   old windows; min-build: shell with `draft.note`). v1 limits: all steer/redirect without note
+ *   (direct Enter-while-busy, fallback and steer-now) — parity with v11, follow-up 'session.redirect
+ *   note'; pre-v12 entries without a frame drain without a note; mode chip on the queue row (neutral
+ *   label, no glyphs).
+ * v12.2 (advice REPO-2026-09-11-V1): "always stage" — the v11 best-effort stage
+ *   (`session.note.stage`, try/catch, no new probe) comes back IN PARALLEL with the draft's `note`.
+ *   One plugin covers: new app + patched core (draft.note wins; the staged one is popped); stock app
+ *   + patched core (only the stage delivers); stock app unpatched (nothing travels, silent
+ *   degradation). The stage fires ONLY on the fresh derivation (never on `fromQueue` drains),
+ *   BEFORE the chain's return, and uses the v11 sid (focused → active).
  *
- * v13 (paquete completo, sin parches): el backend es la ÚNICA fuente de las notas. El
- *   middleware sólo AVISA el modo (`ctx.rest('/mode', {method:'POST'})`, esperado antes de
- *   devolver el draft) y el agent-half lo convierte en la nota del turno por `pre_llm_call`
- *   → api_content. Desaparecen `draft.note` y `session.note.stage`: nada depende de un core
- *   parcheado ni de un renderer reconstruido. El texto tipeado JAMÁS se toca; `ask` además se
- *   refuerza del lado de las herramientas (`pre_tool_call` → solo lectura real).
- * v13.1 (2026-09-16, bucle de debug en vivo): el stage usaba `host.state.focusedSessionId`
- *   = el id de TILE runtime (`$focusedRuntimeId`), que NO es el `agent.session_id` con el que
- *   el core dispara `pre_llm_call` → el store nunca matcheaba y la nota no llegaba a ningún
- *   turno (silenciosamente: `agent` y "sin nota" se ven iguales desde el modelo). Ahora un
- *   único helper (`backendSid`) resuelve `focusedStoredSessionId` primero, con fallback al id
- *   runtime para shells viejos. Probado en vivo: ask/debug/plan entregan su nota y agent no.
+ * v13 (full package, no patches): the backend is the ONLY source of the notes. The
+ *   middleware only NOTIFIES the mode (`ctx.rest('/mode', {method:'POST'})`, awaited before
+ *   returning the draft) and the agent-half turns it into the turn's note via `pre_llm_call`
+ *   → api_content. `draft.note` and `session.note.stage` disappear: nothing depends on a patched
+ *   core or a rebuilt renderer. The typed text is NEVER touched; `ask` is additionally
+ *   enforced on the tool side (`pre_tool_call` → real read-only).
+ * v13.1 (2026-09-16, live debug loop): the stage used `host.state.focusedSessionId`
+ *   = the TILE runtime id (`$focusedRuntimeId`), which is NOT the `agent.session_id` the
+ *   core fires `pre_llm_call` with → the store never matched and the note never reached any
+ *   turn (silently: `agent` and "no note" look the same from the model). Now a single
+ *   helper (`backendSid`) resolves `focusedStoredSessionId` first, with a fallback to the runtime
+ *   id for old shells. Proven live: ask/debug/plan deliver their note and agent does not.
  *
- * Reload: ⌘K → "Reload desktop plugins" (fs-watch solo llega a la ventana
- *   principal; una ventana secundaria necesita reload manual o reapertura).
+ * Reload: ⌘K → "Reload desktop plugins" (fs-watch only reaches the main
+ *   window; a secondary window needs a manual reload or reopen).
  */
 
 import {
@@ -141,16 +142,16 @@ const ID = 'composer-modes'
 const VER = 'v13.1'
 const BOOT = Date.now().toString(36).slice(-4)
 
-/** Sonda → desktop.log vía console.error (único nivel capturado). */
-/** v13.1: el id que el core conoce es el *stored* (backend). El id de tile runtime no
- *  matchea `agent.session_id`, así que la nota del modo no llegaba a ningún turno. */
+/** Probe → desktop.log via console.error (the only level captured). */
+/** v13.1: the id the core knows is the *stored* (backend) one. The tile runtime id does
+ *  not match `agent.session_id`, so the mode note never reached any turn. */
 function backendSid() {
   try {
     const stored = host.state.focusedStoredSessionId
     const value = stored && typeof stored.get === 'function' ? stored.get() : stored
     if (value) return String(value)
   } catch (_) {
-    /* sin stored id: se cae al runtime */
+    /* no stored id: falls back to runtime */
   }
   try {
     return host.state.focusedSessionId.get() || host.state.activeSessionId.get() || null
@@ -160,9 +161,9 @@ function backendSid() {
 }
 
 /**
- * v13: el backend necesita saber el modo ANTES de admitir el turno. `ctx.rest` está scopeado a
- * `/api/plugins/composer-modes` — nunca sale de este plugin. Best-effort: si el backend está
- * apagado (agent half deshabilitado, backend remoto), el envío sigue y el modo queda cosmético.
+ * v13: the backend needs to know the mode BEFORE admitting the turn. `ctx.rest` is scoped to
+ * `/api/plugins/composer-modes` — it never leaves this plugin. Best-effort: if the backend is
+ * down (agent half disabled, remote backend), the send goes on and the mode is cosmetic.
  */
 async function stageMode(ctx, mode, sidOverride) {
   if (typeof ctx.rest !== 'function') {
@@ -184,7 +185,7 @@ async function stageMode(ctx, mode, sidOverride) {
   }
 }
 
-/** Único dueño del cambio de modo: átomo + espejo en storage + aviso al backend. */
+/** Sole owner of the mode change: atom + storage mirror + notify the backend. */
 function applyMode(ctx, mode, sidOverride) {
   activeMode.set(mode)
   void ctx.storage.set('mode', mode)
@@ -195,7 +196,7 @@ function probe(msg) {
   try {
     console.error(`[cm-pa] ${msg}`)
   } catch (_) {
-    /* una sonda nunca debe romper */
+    /* a probe must never break */
   }
 }
 
@@ -206,41 +207,41 @@ const MODES = [
   { id: 'debug', label: 'Debug', icon: 'debug-alt', hint: 'Systematic debugging: evidence first, then fix' }
 ]
 
-/** Fondo del botón por modo — valores CSS directos (style inline): las clases Tailwind con var()
- *  solo existen si el fuente de la app las usa; inline no depende del compile. */
+/** Button background per mode — direct CSS values (inline style): Tailwind classes with var()
+ *  only exist if the app source uses them; inline does not depend on the compile. */
 const MODE_BG = {
   ask: 'var(--ui-green)',
   agent: 'var(--ui-control-active-background)',
-  // debug 20% más oscuro (contraste con el texto); plan vuelve al azul del acento.
+  // debug 20% darker (contrast with the text); plan back to the accent blue.
   plan: 'var(--ui-accent)',
   debug: 'color-mix(in srgb, var(--ui-red) 80%, #000)'
 }
 
-/** Solo se aceptan archivos guardados por /plan. Output del modelo = no confiable. */
+/** Only files saved by /plan are accepted. Model output = untrusted. */
 const PLAN_FILE_RE = /^\.hermes\/plans\/[A-Za-z0-9._-]+\.md$/
 
-/** Ronda del bucle de debug (attr no confiable: solo dígitos). */
+/** Round of the debug loop (attr untrusted: digits only). */
 const ROUND_RE = /^[0-9]{1,3}$/
 
 const EMPTY_DIALOG = { open: false, draft: '', sending: null }
 
-/** Clave del espejo en storage (v5). */
+/** Key of the storage mirror (v5). */
 const DKEY = 'planDialogsV5'
 
 /**
- * Estado del panel por archivo. Atom module-level para reactividad; espejado a
- * ctx.storage para sobrevivir re-evaluación del módulo y recargas.
+ * Panel state per file. Module-level atom for reactivity; mirrored to
+ * ctx.storage to survive module re-evaluation and reloads.
  */
 const planDialogs = atom({})
 let ctxRef = null
 let saveTimer = null
 
-// ── Lector de plan (v10.6) — panel dockeado a la derecha (host.openWorkspace) ──
+// ── Plan reader (v10.6) — pane docked to the right (host.openWorkspace) ──
 const planReaderFile = atom(null)
 const planReaderView = atom({ status: 'idle' })
 let planReaderDispose = null
 
-// ── Preguntas del plan (v10.10) — espejo del stepper (estado por archivo) ──
+// ── Plan questions (v10.10) — mirror of the stepper (state per file) ──
 const PLANQ_KEY = 'planQStateV1'
 const EMPTY_Q = { status: 'idle', questions: null, answers: {}, index: 0, sending: null }
 const planQState = atom({})
@@ -251,7 +252,7 @@ function getQEntry(file) {
   return all[file] || EMPTY_Q
 }
 
-/** Forma persistible: `sending` es transitorio y NUNCA se persiste. */
+/** Persistable shape: `sending` is transient and NEVER persisted. */
 function snapshotQ() {
   const out = {}
   for (const [k, v] of Object.entries(planQState.get())) {
@@ -302,7 +303,7 @@ function hydrateQ(ctx) {
   }
 }
 
-// v10.8: ids del pane del lector + espejo para desktops sin host.paneVisibility.
+// v10.8: ids of the reader pane + mirror for desktops without host.paneVisibility.
 const PLAN_READER_WS = 'composer-modes:plan-reader'
 const PLAN_READER_PANE = 'plugin-workspace:' + PLAN_READER_WS
 const planReaderOpen = atom(false)
@@ -312,7 +313,7 @@ function getDialogEntry(file) {
   return all[file] || EMPTY_DIALOG
 }
 
-/** Forma persistible: `sending` es transitorio y NUNCA se persiste. */
+/** Persistable shape: `sending` is transient and NEVER persisted. */
 function snapshotDialogs() {
   const out = {}
   for (const [k, v] of Object.entries(planDialogs.get())) {
@@ -337,9 +338,9 @@ function setDialogEntry(file, patch) {
 }
 
 /**
- * Rehidrata el espejo. Corre en cada evaluación del módulo (el hot reload
- * re-registra). `sending` se fuerza null: un envío no sobrevive al reload y un
- * flag viejo dejaría todos los botones deshabilitados sin salida.
+ * Rehydrates the mirror. Runs on every module evaluation (the hot reload
+ * re-registers). `sending` is forced to null: a send does not survive a reload and a
+ * stale flag would leave all the buttons disabled with no way out.
  */
 function hydrateDialogs(ctx) {
   try {
@@ -361,7 +362,7 @@ function hydrateDialogs(ctx) {
   }
 }
 
-// ── Marcas persistentes de botones (v10.5) ──
+// ── Persistent button marks (v10.5) ──
 const MARKS_KEY = 'marksV1'
 const MID_RE = /^(\d+(?:\.\d+)?)-\d+-(user|assistant|system)$/
 const marksStamp = atom(0)
@@ -443,21 +444,21 @@ function useCardMarks(card, btns, rootRef, getExtra) {
   return [marks, applyMark, midRef]
 }
 
-/** Shape de comando slash (paridad con SLASH_COMMAND_RE del desktop) — el slash explícito gana.
- *  Las NOTAS de cada modo viven en el agent-half (`modes.py`): acá no se escribe ni un carácter
- *  de instrucción para el modelo. */
+/** Slash command shape (parity with the desktop's SLASH_COMMAND_RE) — the explicit slash wins.
+ *  The NOTES of each mode live in the agent-half (`modes.py`): no character of model
+ *  instruction is written here. */
 const SLASH_SHAPE_RE = /^\/[^\s/]*(?:\s|$)/
 
 const activeMode = atom('agent')
 
-/** Envío en vuelo por ronda de debug — transitorio, NO se persiste. */
+/** In-flight send per debug round — transient, NOT persisted. */
 const debugSending = atom({})
 
 function isValidPlanFile(file) {
   return typeof file === 'string' && PLAN_FILE_RE.test(file)
 }
 
-/** Solo se aceptan archivos de preguntas guardados por el agente (attr no confiable). */
+/** Only question files saved by the agent are accepted (attr untrusted). */
 const PLANQ_FILE_RE = /^\.hermes\/plans\/[A-Za-z0-9._-]+\.json$/
 
 function isValidPlanQFile(file) {
@@ -468,7 +469,7 @@ function notifySafe(payload) {
   try {
     if (host && typeof host.notify === 'function') host.notify(payload)
   } catch (_) {
-    /* un toast nunca debe romper el plugin */
+    /* a toast must never break the plugin */
   }
 }
 
@@ -476,7 +477,7 @@ function submitTurn(text, displayKind) {
   const sid =
     host.state.focusedSessionId.get() || host.state.activeSessionId.get() || null
   if (!sid) {
-    notifySafe({ kind: 'error', message: 'Sin sesión activa para enviar.' })
+    notifySafe({ kind: 'error', message: 'No active session to send to.' })
     return Promise.reject(new Error('no active session'))
   }
   return host.request('prompt.submit', {
@@ -486,7 +487,7 @@ function submitTurn(text, displayKind) {
   })
 }
 
-// ── Lector de plan v10.6: abre el .md en un panel dockeado a la derecha ──
+// ── Plan reader v10.6: opens the .md in a pane docked to the right ──
 
 function resolvePlanAbs(file) {
   if (typeof file !== 'string' || !file) return ''
@@ -497,7 +498,7 @@ function resolvePlanAbs(file) {
   return (cwd.endsWith('/') ? cwd : cwd + '/') + file
 }
 
-/** Validación leniente del JSON de preguntas (input del modelo = no confiable). */
+/** Lenient validation of the questions JSON (model input = untrusted). */
 function normalizeQuestions(raw) {
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
@@ -522,12 +523,12 @@ function normalizeQuestions(raw) {
   }
 }
 
-/** Payload de respuestas (v10.10): respuestas del usuario primero, instrucción EN al final. */
+/** Answers payload (v10.10): the user's answers first, the EN instruction at the end. */
 function planQAnswersBody(file, questions, answersMap) {
-  const lines = [`Respuestas a las preguntas del plan (${file}):`]
+  const lines = [`Answers to the plan questions (${file}):`]
   questions.forEach((item, i) => {
     const a = answersMap[i]
-    const shown = a === null || a === undefined || a === '' ? '(sin respuesta)' : String(a)
+    const shown = a === null || a === undefined || a === '' ? '(no answer)' : String(a)
     lines.push(`${i + 1}) ${item.q}`)
     lines.push(`→ ${shown}`)
   })
@@ -540,18 +541,18 @@ function planQAnswersBody(file, questions, answersMap) {
 
 function planQContinueBody(file) {
   return [
-    `No pude leer o responder tus preguntas (${file}).`,
+    `I could not read or answer your questions (${file}).`,
     '',
     'Continue in PLAN MODE: write the plan now choosing sensible defaults, list the assumptions and open questions in the plan, and end your reply with ONLY the ::plan-approve directive.'
   ].join('\n')
 }
 
-/** Envío de respuestas: directo (sin middleware ni slice 450); techo duro 16K. */
+/** Answers send: direct (no middleware, no 450 slice); hard ceiling 16K. */
 function submitPlanAnswers(text, label) {
   const body = String(text || '')
   if (!body.trim()) return Promise.reject(new Error('empty answers'))
   if (body.length > 16000) {
-    notifySafe({ kind: 'error', message: 'Las respuestas son demasiado largas para enviar.' })
+    notifySafe({ kind: 'error', message: 'The answers are too long to send.' })
     return Promise.reject(new Error('answers too long'))
   }
   probe(`pq send kind=${label} len=${body.length}`)
@@ -566,7 +567,7 @@ function openPlanReader(file) {
     typeof window !== 'undefined' &&
     typeof window.hermesDesktop?.readFileText === 'function'
   if (!canPane || !abs) {
-    probe(`planview fallback abs=${abs || '(sin cwd)'}`)
+    probe(`planview fallback abs=${abs || '(no cwd)'}`)
     const target = abs || file
     submitTurn(
       `Open ${target} in the preview pane: run desktop_preview with action "open" and url "${target}". ` +
@@ -595,7 +596,7 @@ function openPlanReader(file) {
   probe('planview pane')
 }
 
-/** Toggle-close (v10.8): ejecuta SOLO el handle vivo — un disposer viejo removería el pane re-registrado. */
+/** Toggle-close (v10.8): runs ONLY the live handle — a stale disposer would remove the re-registered pane. */
 function closePlanReader() {
   const d = planReaderDispose
   if (typeof d !== 'function') {
@@ -617,12 +618,12 @@ function PlanReaderPane() {
     if (!file) return undefined
     const abs = resolvePlanAbs(file)
     if (!abs) {
-      planReaderView.set({ status: 'err', msg: 'Sin workspace (cwd vacío): no puedo resolver el path.' })
+      planReaderView.set({ status: 'err', msg: 'No workspace (empty cwd): cannot resolve the path.' })
       return undefined
     }
     const read = typeof window !== 'undefined' && window.hermesDesktop ? window.hermesDesktop.readFileText : null
     if (typeof read !== 'function') {
-      planReaderView.set({ status: 'err', msg: 'readFileText no disponible en este shell.' })
+      planReaderView.set({ status: 'err', msg: 'readFileText not available in this shell.' })
       return undefined
     }
     let alive = true
@@ -631,7 +632,7 @@ function PlanReaderPane() {
       .then((r) => {
         if (!alive) return
         if (r && r.binary) {
-          planReaderView.set({ status: 'err', msg: 'El archivo es binario: no se puede mostrar.' })
+          planReaderView.set({ status: 'err', msg: 'The file is binary: it cannot be shown.' })
           probe(`planview err file=${file} binary`)
           return
         }
@@ -654,9 +655,9 @@ function PlanReaderPane() {
       className: 'h-full min-h-0 overflow-auto p-2.5 text-(--ui-text-secondary)',
       children
     })
-  if (!file) return wrap('Sin plan seleccionado.')
-  if (view.status === 'loading') return wrap('Leyendo el plan…')
-  if (view.status === 'err') return wrap(view.msg || 'No se pudo leer el plan.')
+  if (!file) return wrap('No plan selected.')
+  if (view.status === 'loading') return wrap('Reading the plan…')
+  if (view.status === 'err') return wrap(view.msg || 'Could not read the plan.')
   const body =
     typeof Streamdown === 'function'
       ? jsx(Streamdown, { mode: 'static', children: view.text || '' })
@@ -672,7 +673,7 @@ function PlanReaderPane() {
       jsx('div', {
         key: 'tr',
         className: 'mb-2 text-xs',
-        children: 'Archivo grande: vista truncada a 512 KiB.'
+        children: 'Large file: view truncated at 512 KiB.'
       }),
       body
     ]
@@ -685,7 +686,7 @@ export default {
   register(ctx) {
     ctxRef = ctx
 
-    // v10.9: purga one-time de las marcas ':plan:edit' falsas (v10.8 marcaba al ABRIR el editor).
+    // v10.9: one-time purge of the false ':plan:edit' marks (v10.8 marked on OPENING the editor).
     try {
       if (!ctx.storage.get('marksPurgeV9', false)) {
         const purgeMap = readMarks()
@@ -701,7 +702,7 @@ export default {
         probe(`marks purge edit n=${purgeN}`)
       }
     } catch (_) {
-      /* una purga nunca debe romper el register */
+      /* a purge must never break the register */
     }
     probe(
       `register ver=${VER} boot=${BOOT} notelocal=backend hash=${String((typeof location !== 'undefined' && location.hash) || '').slice(0, 24)}`
@@ -725,7 +726,7 @@ export default {
     window.addEventListener('storage', onMarksStorage)
     ctx.onDispose(() => window.removeEventListener('storage', onMarksStorage))
 
-    // v10.8: visibilidad real del pane del lector (toggle Leer/Cerrar). Feature-detect en register.
+    // v10.8: real visibility of the reader pane (Read/Close toggle). Feature-detect in register.
     if (typeof host.paneVisibility === 'function') {
       const vis = host.paneVisibility(PLAN_READER_PANE)
       probe(`read vis=${vis.get() ? 1 : 0}`)
@@ -747,14 +748,14 @@ export default {
       }
     })
 
-    // Restaurar modo persistido (API sync: get(key, fallback) → valor).
+    // Restore the persisted mode (sync API: get(key, fallback) → value).
     const savedMode = ctx.storage.get('mode', 'agent')
     if (MODES.some((m) => m.id === savedMode)) activeMode.set(savedMode)
-    // Al cargar: el backend arranca en 'agent' (default). Empujamos el modo persistido para que
-    // el primer envío ya esté alineado aunque el middleware no llegue a correr (steer, cards).
+    // On load: the backend starts in 'agent' (default). We push the persisted mode so that
+    // the first send is already aligned even if the middleware does not get to run (steer, cards).
     void stageMode(ctx, activeMode.get())
 
-    // ── Tarjeta de aprobación: box + editor inline ──
+    // ── Approval card: box + inline editor ──
     function PlanApproveCard({ file }) {
       const dialogs = useValue(planDialogs)
       const entry = (file && dialogs[file]) || EMPTY_DIALOG
@@ -764,7 +765,7 @@ export default {
       const rootRef = useRef(null)
       const [marks, applyMark, midRef] = useCardMarks('plan', ['go', 'edit'], rootRef, () => file)
 
-      // v10.8: toggle del lector — pane visible Y archivo de ESTA tarjeta.
+      // v10.8: reader toggle — pane visible AND the file of THIS card.
       const readerFile = useValue(planReaderFile)
       const paneVis = useValue(
         typeof host.paneVisibility === 'function' ? host.paneVisibility(PLAN_READER_PANE) : planReaderOpen
@@ -799,7 +800,7 @@ export default {
             if (key === 'go') applyMark('go', false)
             else if (key === 'edit' && freshMark) applyMark('edit', false)
             setEntry({ sending: null })
-            notifySafe({ kind: 'error', message: 'No se pudo enviar. Probá desde la caja de prompt.' })
+            notifySafe({ kind: 'error', message: 'Could not send. Try from the prompt box.' })
           })
       }
 
@@ -812,7 +813,7 @@ export default {
           jsx('div', {
             key: 'head',
             className: 'mb-1 text-sm font-semibold',
-            children: `Plan listo — ¿qué hacemos? ${VER}·${BOOT}`
+            children: `Plan ready — what next? ${VER}·${BOOT}`
           }),
           jsx('div', {
             key: 'file',
@@ -822,7 +823,7 @@ export default {
           jsx('div', {
             key: 'hint',
             className: 'mb-3 text-xs text-(--ui-text-tertiary)',
-            children: 'Detalle completo en el archivo del plan.'
+            children: 'Full detail in the plan file.'
           }),
           jsxs('div', {
             key: 'row',
@@ -845,7 +846,7 @@ export default {
                   marks.go
                     ? jsx(Codicon, { key: 'tick-go', name: 'check', size: '0.75rem', className: 'mr-1 shrink-0' })
                     : null,
-                  sending === 'go' ? 'Enviando…' : 'Implementar ahora'
+                  sending === 'go' ? 'Sending…' : 'Implement now'
                 ]
               }),
               jsx(Button, {
@@ -906,7 +907,7 @@ export default {
           jsx('div', {
             key: 'alt',
             className: 'mt-2 text-xs text-(--ui-text-tertiary)',
-            children: 'O escribí en la caja de prompt para ajustar el plan.'
+            children: 'Or write in the prompt box to adjust the plan.'
           }),
           modifyOpen && jsx('div', {
             key: 'editor',
@@ -916,18 +917,18 @@ export default {
                 jsx('div', {
                   key: 't',
                   className: 'mb-1 text-xs font-semibold',
-                  children: 'Modificar el plan'
+                  children: 'Modify the plan'
                 }),
                 jsx('div', {
                   key: 'd',
                   className: 'mb-1 text-xs text-(--ui-text-tertiary)',
-                  children: 'Describí qué cambiar. Se envía como turno nuevo que referencia el plan.'
+                  children: 'Describe what to change. Sent as a new turn that references the plan.'
                 }),
                 jsx(Textarea, {
                   key: 'ta',
                   value: draft,
                   rows: 5,
-                  placeholder: 'Describí qué cambiar del plan…',
+                  placeholder: 'Describe what to change in the plan…',
                   onChange: (e) => setEntry({ draft: e.target.value })
                 }),
                 jsxs('div', {
@@ -1007,12 +1008,12 @@ export default {
         if (entry.questions) return undefined
         const abs = resolvePlanAbs(file)
         if (!abs) {
-          setQEntry(file, { status: 'err', msg: 'Sin workspace (cwd vacío): no puedo resolver el path.' })
+          setQEntry(file, { status: 'err', msg: 'No workspace (empty cwd): cannot resolve the path.' })
           return undefined
         }
         const read = typeof window !== 'undefined' && window.hermesDesktop ? window.hermesDesktop.readFileText : null
         if (typeof read !== 'function') {
-          setQEntry(file, { status: 'err', msg: 'readFileText no disponible en este shell.' })
+          setQEntry(file, { status: 'err', msg: 'readFileText not available in this shell.' })
           return undefined
         }
         let alive = true
@@ -1021,13 +1022,13 @@ export default {
           .then((r) => {
             if (!alive) return
             if (r && r.binary) {
-              setQEntry(file, { status: 'err', msg: 'El archivo de preguntas es binario.' })
+              setQEntry(file, { status: 'err', msg: 'The questions file is binary.' })
               probe(`pq load err file=${file} binary`)
               return
             }
             const list = normalizeQuestions(r ? r.text : '')
             if (!list || !list.length) {
-              setQEntry(file, { status: 'err', msg: 'No pude leer preguntas válidas del archivo.' })
+              setQEntry(file, { status: 'err', msg: 'Could not read valid questions from the file.' })
               probe(`pq load err file=${file} parse`)
               return
             }
@@ -1127,7 +1128,7 @@ export default {
         const fresh = !isMarked('planq', 'send', midRef.current, file)
         const map = {}
         questions.forEach((_, i) => {
-          map[i] = shownAnswer(answers[i]) || '(sin respuesta)'
+          map[i] = shownAnswer(answers[i]) || '(no answer)'
         })
         applyMark('send', true)
         setQEntry(file, { sending: 'send' })
@@ -1140,7 +1141,7 @@ export default {
             probe(`pq send err ${String((e && e.message) || e)}`)
             if (fresh) applyMark('send', false)
             setQEntry(file, { sending: null })
-            notifySafe({ kind: 'error', message: 'No se pudo enviar. Probá desde la caja de prompt.' })
+            notifySafe({ kind: 'error', message: 'Could not send. Try from the prompt box.' })
           })
       }
       const sendContinue = () => {
@@ -1157,14 +1158,14 @@ export default {
             probe(`pq continue err ${String((e && e.message) || e)}`)
             if (fresh) applyMark('send', false)
             setQEntry(file, { sending: null })
-            notifySafe({ kind: 'error', message: 'No se pudo enviar. Probá desde la caja de prompt.' })
+            notifySafe({ kind: 'error', message: 'Could not send. Try from the prompt box.' })
           })
       }
 
       const header = jsx('div', {
         key: 'head',
         className: 'mb-1 text-sm font-semibold text-(--ui-text-primary)',
-        children: `${total > 0 ? `Preguntas sobre el plan — ${index + 1}/${total}` : 'Preguntas sobre el plan'} · ${VER}·${BOOT}`
+        children: `${total > 0 ? `Questions about the plan — ${index + 1}/${total}` : 'Questions about the plan'} · ${VER}·${BOOT}`
       })
       const shell = (children) =>
         jsxs('div', {
@@ -1177,7 +1178,7 @@ export default {
         disabled: sending || sent,
         'aria-pressed': sent,
         onClick: sendContinue,
-        children: [sent ? tick('tick-cont') : null, sending ? 'Enviando…' : 'Continuar sin responder']
+        children: [sent ? tick('tick-cont') : null, sending ? 'Sending…' : 'Continue without answering']
       })
 
       if (!valid) {
@@ -1186,7 +1187,7 @@ export default {
           jsx('div', {
             key: 'bad',
             className: 'mb-2 text-xs text-(--ui-text-tertiary)',
-            children: 'Directiva inválida.'
+            children: 'Invalid directive.'
           }),
           fallbackBtn
         ])
@@ -1194,7 +1195,7 @@ export default {
       if (entry.status === 'loading') {
         return shell([
           header,
-          jsx('div', { key: 'ld', className: 'text-xs text-(--ui-text-tertiary)', children: 'Leyendo las preguntas…' })
+          jsx('div', { key: 'ld', className: 'text-xs text-(--ui-text-tertiary)', children: 'Reading the questions…' })
         ])
       }
       if (entry.status === 'err' || !current) {
@@ -1203,7 +1204,7 @@ export default {
           jsx('div', {
             key: 'err',
             className: 'mb-2 text-xs text-(--ui-text-tertiary)',
-            children: entry.msg || 'No se pudieron leer las preguntas.'
+            children: entry.msg || 'Could not read the questions.'
           }),
           fallbackBtn
         ])
@@ -1233,7 +1234,7 @@ export default {
         className: cn('w-full justify-start text-left whitespace-normal', otherActive && 'bg-(--ui-control-active-background) text-(--ui-text-primary)'),
         style: otherActive ? { background: 'var(--ui-control-active-background)', color: 'var(--ui-text-primary)' } : undefined,
         onClick: pickOther,
-        children: [otherActive ? tick('tick-other') : null, `${current.options.length + 1}. Otra respuesta…`]
+        children: [otherActive ? tick('tick-other') : null, `${current.options.length + 1}. Other answer…`]
       })
       const freeField = otherActive
         ? jsx(Textarea, {
@@ -1241,7 +1242,7 @@ export default {
             value: a && typeof a.text === 'string' ? a.text : '',
             maxLength: 500,
             rows: 3,
-            placeholder: 'Redactá tu respuesta…',
+            placeholder: 'Write your answer…',
             disabled: sent || sending,
             className: 'mt-1.5',
             onChange: (e) => typeText(e && e.target ? e.target.value : '')
@@ -1265,21 +1266,21 @@ export default {
               key: 'back',
               disabled: sending || index === 0,
               onClick: () => goto(index - 1),
-              children: 'Atrás'
+              children: 'Back'
             }),
             index < total - 1
               ? jsx(Button, {
                   key: 'next',
                   disabled: sending || sent || !answered(a),
                   onClick: () => goto(index + 1),
-                  children: 'Siguiente'
+                  children: 'Next'
                 })
               : jsx(Button, {
                   key: 'send',
                   disabled: sending || sent || !allAnswered,
                   'aria-pressed': sent,
                   onClick: sendAnswers,
-                  children: [sent ? tick('tick-send') : null, sending ? 'Enviando…' : 'Enviar respuestas']
+                  children: [sent ? tick('tick-send') : null, sending ? 'Sending…' : 'Send answers']
                 })
           ]
         }),
@@ -1287,8 +1288,8 @@ export default {
           key: 'alt',
           className: 'mt-1.5 text-xs text-(--ui-text-tertiary)',
           children: sent
-            ? 'Para ajustar algo, escribí en la caja de prompt.'
-            : 'Respondé cada pregunta (opción o texto) y enviá todo junto.'
+            ? 'To adjust something, write in the prompt box.'
+            : 'Answer each question (option or text) and send them all together.'
         })
       ])
     }
@@ -1302,7 +1303,7 @@ export default {
       }
     })
 
-    // ── Tarjeta del bucle de debug ──
+    // ── Debug loop card ──
     function DebugLoopCard({ round }) {
       const sendingMap = useValue(debugSending)
       const rk = `r${round}`
@@ -1339,7 +1340,7 @@ export default {
             probe(`send err key=${key} ${String((e && e.message) || e)}`)
             if (key === 'retry' || key === 'fixed') applyMark(key, false)
             setSending(null)
-            notifySafe({ kind: 'error', message: 'No se pudo enviar. Probá desde la caja de prompt.' })
+            notifySafe({ kind: 'error', message: 'Could not send. Try from the prompt box.' })
           })
       }
 
@@ -1355,12 +1356,12 @@ export default {
           jsx('div', {
             key: 'head',
             className: 'mb-1 text-sm font-semibold',
-            children: `Modo Debug — ronda ${valid ? round : '?'} ${VER}·${BOOT}`
+            children: `Debug mode — round ${valid ? round : '?'} ${VER}·${BOOT}`
           }),
           jsx('div', {
             key: 'hint',
             className: 'mb-3 text-xs text-(--ui-text-tertiary)',
-            children: 'Seguí los pasos del mensaje de arriba; después usá un botón.'
+            children: 'Follow the steps in the message above; then use a button.'
           }),
           jsxs('div', {
             key: 'row',
@@ -1383,7 +1384,7 @@ export default {
                   marks.retry
                     ? jsx(Codicon, { key: 'tick-retry', name: 'check', size: '0.75rem', className: 'mr-1 shrink-0' })
                     : null,
-                  sending === 'retry' ? 'Enviando…' : "I already did the steps, it's still not working"
+                  sending === 'retry' ? 'Sending…' : "I already did the steps, it's still not working"
                 ]
               }),
               jsx(Button, {
@@ -1403,7 +1404,7 @@ export default {
                   marks.fixed
                     ? jsx(Codicon, { key: 'tick-fixed', name: 'check', size: '0.75rem', className: 'mr-1 shrink-0' })
                     : null,
-                  sending === 'fixed' ? 'Enviando…' : 'Mark as fixed'
+                  sending === 'fixed' ? 'Sending…' : 'Mark as fixed'
                 ]
               })
             ]
@@ -1421,8 +1422,8 @@ export default {
       }
     })
 
-    // ── Auto-reset: cuando llega el plan, volver a agent para que los
-    //    follow-ups (modificar / texto en la caja) NO se re-prefijen con /plan ──
+    // ── Auto-reset: when the plan arrives, go back to agent so follow-ups
+    //    (modify / text in the box) are NOT re-prefixed with /plan ──
     if (host && typeof host.onEvent === 'function') {
       const disposeEvent = host.onEvent('message.complete', (event) => {
         try {
@@ -1437,7 +1438,7 @@ export default {
             probe('auto-reset planq->agent')
             notifySafe({
               kind: 'info',
-              message: 'El agente tiene preguntas — respondé en la tarjeta. Modo vuelto a Agent.'
+              message: 'The agent has questions — answer in the card. Mode reset to Agent.'
             })
             return
           }
@@ -1446,18 +1447,18 @@ export default {
             probe('auto-reset to agent')
             notifySafe({
               kind: 'info',
-              message: 'Plan listo — modo vuelto a Agent. Implementá, modificá o escribí en el prompt.'
+              message: 'Plan ready — mode reset to Agent. Implement, modify, or write in the prompt.'
             })
           }
         } catch (_) {
-          /* un listener nunca debe romper el dispatch de la app */
+          /* a listener must never break the app dispatch */
         }
       })
       if (typeof disposeEvent === 'function') ctx.onDispose(disposeEvent)
     }
-    // ── Auto-reset del bucle de debug: al aparecer la tarjeta (::debug-loop
-    //    en la respuesta), volver a agent. Si no, cada mensaje tipeado se
-    //    re-prefija con el contrato y RE-INSTRUMENTA el proyecto ──
+    // ── Auto-reset of the debug loop: when the card appears (::debug-loop
+    //    in the reply), go back to agent. Otherwise each typed message gets
+    //    re-prefixed with the contract and RE-INSTRUMENTS the project ──
     if (host && typeof host.onEvent === 'function') {
       const disposeDebugEvent = host.onEvent('message.complete', (event) => {
         try {
@@ -1467,15 +1468,15 @@ export default {
           if (!text.includes('::debug-loop')) return
           applyMode(ctx, 'agent')
           probe('auto-reset debug->agent')
-          notifySafe({ kind: 'info', message: 'Tarjeta de debug lista — seguí con sus botones. Modo vuelto a Agent.' })
+          notifySafe({ kind: 'info', message: 'Debug card ready — continue with its buttons. Mode reset to Agent.' })
         } catch (_) {
-          /* un listener nunca debe romper el dispatch */
+          /* a listener must never break the dispatch */
         }
       })
       if (typeof disposeDebugEvent === 'function') ctx.onDispose(disposeDebugEvent)
     }
 
-    // Flush del espejo y limpieza del debounce al descargar/recargar.
+    // Flush the mirrors and clear the debounce on unload/reload.
     ctx.onDispose(() => {
       clearTimeout(saveTimer)
       clearTimeout(saveQTimer)
@@ -1487,21 +1488,21 @@ export default {
         try {
           d()
         } catch (_) {
-          /* cerrar un panel nunca debe romper el dispose */
+          /* closing a panel must never break the dispose */
         }
       }
       probe(`dispose boot=${BOOT}`)
     })
 
-    // ── Botón único de modo en la tira del composer ──
+    // ── Single mode button in the composer bar ──
     function ModeButton() {
       const mode = useValue(activeMode)
       const sid = useValue(host.state.focusedSessionId)
       const current = MODES.find((m) => m.id === mode) || MODES[0]
 
-      // Reset por sesión nueva. D1 (consejo MODEB-V10): el nacimiento desde borrador
-      // (null a id) NO es sesión nueva — elegir el modo en el borrador sobrevive al primer
-      // envío y el modo persistido no se pisa tras un reload.
+      // Reset on new session. D1 (advice MODEB-V10): birth from a draft
+      // (null to id) is NOT a new session — choosing a mode in a draft survives
+      // the first send and the persisted mode is not clobbered after a reload.
       const lastSid = useRef(sid)
       useEffect(() => {
         if (sid === lastSid.current) return
@@ -1523,7 +1524,7 @@ export default {
             children: jsxs('button', {
               type: 'button',
               'data-mode': current.id,
-              'aria-label': `Modo ${current.label} — clic o Shift+Tab para cambiar`,
+              'aria-label': `${current.label} mode — click or Shift+Tab to change`,
               className: cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[0.6875rem] font-medium transition-opacity',
                 'hover:opacity-90'
@@ -1551,16 +1552,16 @@ export default {
       render: () => jsx(ModeButton, {})
     })
 
-    // ── Ciclo de modos: dueño único — el botón y Shift+Tab lo llaman ──
+    // ── Mode cycle: sole owner — the button and Shift+Tab both call it ──
     function cycleMode() {
       const prev = activeMode.get()
       const idx = MODES.findIndex((m) => m.id === prev)
-      const next = MODES[(idx + 1) % MODES.length].id // idx -1 (modo desconocido) → ask
+      const next = MODES[(idx + 1) % MODES.length].id // idx -1 (unknown mode) → ask
       applyMode(ctx, next)
       probe(`cycle ${prev}->${next}`)
     }
 
-    // ── Atajo: Shift+Tab cicla el modo (capture en window, scope work-area) ──
+    // ── Shortcut: Shift+Tab cycles the mode (capture on window, scope work-area) ──
     const WORK_AREA =
       '[data-slot="composer-root"], [data-slot="composer-surface"], [data-slot="composer-bounds"]'
     const SKIP_TARGET =
@@ -1579,17 +1580,17 @@ export default {
         e.preventDefault()
         e.stopPropagation()
       } catch (_) {
-        /* un listener nunca debe romper el dispatch de la app */
+        /* a listener must never break the app dispatch */
       }
     }
     window.addEventListener('keydown', onModeKey, true)
     ctx.onDispose(() => window.removeEventListener('keydown', onModeKey, true))
 
-    // ── Middleware v13: AVISA el modo al backend y no toca el texto ──
-    //    El await garantiza que el backend ya conoce el modo (y su nota) cuando el
-    //    turno se admite; la cola re-corre la cadena al drenar, así que un envío
-    //    encolado usa el modo vivo al drenar. Si el backend no responde, el envío
-    //    sale igual (modo cosmético) — un middleware jamás come un mensaje.
+    // ── Middleware v13: NOTIFIES the backend of the mode and never touches the text ──
+    //    The await guarantees the backend already knows the mode (and its note) by the
+    //    time the turn is admitted; the queue re-runs the chain at drain, so a queued
+    //    send uses the live mode at drain. If the backend does not respond, the send
+    //    goes out anyway (mode cosmetic) — a middleware never eats a message.
     ctx.register({
       id: 'rewrite',
       area: 'composer.middleware',
@@ -1601,7 +1602,7 @@ export default {
             const text = String(draft.text || '').trim()
             if (!text) return draft
             const hasAtts = !!(draft.attachments && draft.attachments.length)
-            // Slash explícito gana: un texto que ES un comando nunca lleva nota.
+            // Explicit slash wins: text that IS a command never carries a note.
             if (!hasAtts && SLASH_SHAPE_RE.test(text)) return draft
             await stageMode(ctx, mode)
             probe('mw v13 mode=' + mode)

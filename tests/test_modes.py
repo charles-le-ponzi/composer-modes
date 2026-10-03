@@ -39,8 +39,8 @@ def test_notes_are_non_empty_and_tagged(mode):
 
 def test_ask_note_keeps_the_mandated_closing_sentence():
     """The owner's ask contract: the closing sentence is verbatim, only A/B/C adapts."""
-    assert "Estoy en modo Ask, solo puedo responder." in ASK_NOTE
-    assert "tenés que pedírmelo en modo Agent." in ASK_NOTE
+    assert "I am in Ask mode, I can only answer." in ASK_NOTE
+    assert "ask me to do so in Agent mode." in ASK_NOTE
     assert "Never claim or pretend to have performed an action you did not perform." in ASK_NOTE
 
 

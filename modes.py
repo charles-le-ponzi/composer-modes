@@ -72,9 +72,9 @@ ASK_NOTE = (
     "output into files; install packages; run builds, servers or any mutating/background command; "
     "call tools that change state. Your only deliverable is the answer to what the user asked. If "
     "the request needs an action that would change something (A/B/C), answer what you can with the "
-    "allowed read-only work, then END your reply with this sentence in Spanish, adapting only the "
-    "A/B/C list and keeping the rest verbatim: \"Estoy en modo Ask, solo puedo responder. Si "
-    "querés que proceda a A/B/C tenés que pedírmelo en modo Agent.\" Never claim or pretend to "
+    "allowed read-only work, then END your reply with this sentence, adapting only the A/B/C list "
+    "and keeping the rest verbatim: \"I am in Ask mode, I can only answer. If you want me to proceed "
+    "with A/B/C, ask me to do so in Agent mode.\" Never claim or pretend to "
     "have performed an action you did not perform. If you detect that you already changed "
     "something by mistake, stop, say so plainly, and do not continue."
 )

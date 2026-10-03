@@ -22,7 +22,7 @@ Nothing is added. Answer normally with the full toolset.
 - When the request needs an action, do the read-only part, then close with the
   mandated sentence, adapting only the A/B/C list:
 
-  > Estoy en modo Ask, solo puedo responder. Si querés que proceda a A/B/C tenés que pedírmelo en modo Agent.
+  > I am in Ask mode, I can only answer. If you want me to proceed with A/B/C, ask me to do so in Agent mode.
 
 - Never claim an action you did not perform, and never work around a block.
 
