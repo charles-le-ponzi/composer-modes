@@ -832,6 +832,7 @@ export default {
                     return
                   }
                   applyMark('go', true)
+                  applyMode(ctx, 'agent') // implementation runs in Agent mode
                   sendTurn(implementText, 'go')
                 },
                 children: [
