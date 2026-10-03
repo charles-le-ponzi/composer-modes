@@ -852,7 +852,7 @@ export default {
                   marks.edit
                     ? jsx(Codicon, { key: 'tick-edit', name: 'check', size: '0.75rem', className: 'mr-1 shrink-0' })
                     : null,
-                  'Modificar'
+                  'Modify'
                 ]
               }),
               jsx(Button, {
@@ -867,7 +867,7 @@ export default {
                     /* clipboard best-effort */
                   }
                 },
-                children: 'Copiar path'
+                children: 'Copy path'
               }),
               jsx(Button, {
                 key: 'read',
@@ -944,7 +944,7 @@ export default {
                         applyMark('edit', true)
                         sendTurn(`Update the plan at ${file} with these changes: ${draft}`, 'edit', freshEdit)
                       },
-                      children: sending === 'edit' ? 'Enviando…' : 'Enviar cambios'
+                      children: sending === 'edit' ? 'Sending…' : 'Send changes'
                     })
                   ]
                 })
