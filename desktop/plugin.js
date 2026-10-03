@@ -743,8 +743,8 @@ export default {
         tip: mode => `${mode} mode active`
       },
       es: {
-        modesLabel: 'Modo',
-        tip: mode => `Modo ${mode} activo`
+        modesLabel: 'Mode',
+        tip: mode => `${mode} mode active`
       }
     })
 
@@ -1520,7 +1520,7 @@ export default {
         children: [
           jsx(Tip, {
             key: 'mode',
-            label: `${current.hint} · clic o Shift+Tab: Ask → Agent → Plan → Debug · ${VER}·${BOOT}`,
+            label: `${current.hint} · click or Shift+Tab: Ask → Agent → Plan → Debug · ${VER}·${BOOT}`,
             children: jsxs('button', {
               type: 'button',
               'data-mode': current.id,
