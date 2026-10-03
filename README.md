@@ -22,6 +22,7 @@ Composer Modes adds a mode button to the Hermes **desktop** composer:
 | **Ask** | Read-only turn. The agent may read and inspect; it must not change anything, and it closes with a clear sentence telling you to re-ask in Agent mode. State-changing tool calls are **blocked**, not just discouraged. |
 | **Agent** | The default. Full toolset, nothing added. |
 | **Plan** | Planning only. The plan is saved under `.hermes/plans/` and the reply ends with an inline **Plan card** (Implement / Modify / Read plan / Copy path). |
+| **Orchestrator** | Drives the task through sequential subagents (plan → implement → verify → debug). Runs code/tests to verify but **cannot edit code** — edits are delegated. The model cannot change its own mode. |
 | **Debug** | A guided loop: instrument → numbered reproduction steps → *still broken?* → fix → *Mark as fixed* cleans the instrumentation up. |
 
 One package, two halves:

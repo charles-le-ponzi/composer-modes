@@ -2,10 +2,10 @@ name: composer-modes
 version: "2.0.1"
 description: >-
   Composer Modes — a mode selector in the Hermes desktop composer (ask / agent /
-  plan / debug). The mode's operating note reaches the model hidden inside the
-  turn's model-facing bytes: never your bubble, your transcript, your sidebar
-  preview or your session titles. Ask mode is also enforced read-only on the
-  tool side.
+  plan / debug / orchestrator). The mode's operating note reaches the model
+  hidden inside the turn's model-facing bytes: never your bubble, your
+  transcript, your sidebar preview or your session titles. Ask mode is also
+  enforced read-only on the tool side.
 author: LisandroNahuelH
 license: MIT
 homepage: https://github.com/LisandroNahuelH/hermes-composer-modes
