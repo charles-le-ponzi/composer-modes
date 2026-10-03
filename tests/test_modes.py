@@ -53,7 +53,7 @@ def test_plan_note_carries_the_approval_and_questions_directives():
 def test_orchestrator_note_mandates_delegation_and_mode_lock():
     from modes import ORCH_NOTE
     assert "delegate_task" in ORCH_NOTE
-    assert "SEQUENTIAL" in ORCH_NOTE
+    assert "FIRST ACTION" in ORCH_NOTE  # must delegate a planner before anything else
     assert "[ROLE: planner]" in ORCH_NOTE  # subagent role tags are mandated
     assert "CANNOT change" in ORCH_NOTE  # the model cannot change its own mode
 
