@@ -203,8 +203,8 @@ function probe(msg) {
 }
 
 const MODES = [
-  { id: 'plan', label: 'Plan', icon: 'checklist', hint: 'Write a plan only — no execution (/plan)' },
   { id: 'orchestrator', label: 'Orchestrator', icon: 'organization', hint: 'Delegate to subagents: plan, build, verify, debug' },
+  { id: 'plan', label: 'Plan', icon: 'checklist', hint: 'Write a plan only — no execution (/plan)' },
   { id: 'agent', label: 'Agent', icon: 'hubot', hint: 'Full agentic mode (default)' },
   { id: 'debug', label: 'Debug', icon: 'debug-alt', hint: 'Systematic debugging: evidence first, then fix' },
   { id: 'ask', label: 'Ask', icon: 'comment-discussion', hint: 'Answer only — never edit files or run mutations' }
@@ -213,22 +213,12 @@ const MODES = [
 /** Button background per mode — direct CSS values (inline style): Tailwind classes with var()
  *  only exist if the app source uses them; inline does not depend on the compile. */
 const MODE_BG = {
-  ask: 'var(--ui-green)',
+  // Tiles are darkened (color-mix with black) so the white glyphs stay legible.
+  ask: 'color-mix(in srgb, var(--ui-green) 65%, #000)',
   agent: 'var(--ui-control-active-background)',
-  // debug 20% darker (contrast with the text); plan back to the accent blue.
-  plan: 'var(--ui-accent)',
-  debug: 'color-mix(in srgb, var(--ui-red) 80%, #000)',
-  orchestrator: 'var(--ui-purple)'
-}
-
-// Icon glyph color per mode. White washes out on the colored tiles, so those
-// get a dark glyph; agent's tile is already dark, so it keeps the white glyph.
-const MODE_ICON = {
-  ask: '#0a0a0a',
-  agent: 'var(--ui-text-primary)',
-  plan: '#0a0a0a',
-  debug: '#0a0a0a',
-  orchestrator: '#0a0a0a'
+  plan: 'color-mix(in srgb, var(--ui-accent) 65%, #000)',
+  debug: 'color-mix(in srgb, var(--ui-red) 70%, #000)',
+  orchestrator: 'color-mix(in srgb, var(--ui-purple) 65%, #000)'
 }
 
 /** Only files saved by /plan are accepted. Model output = untrusted. */
@@ -1567,7 +1557,7 @@ export default {
                     color: 'var(--ui-text-primary)'
                   },
                   children: [
-                    jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0', style: { color: MODE_ICON[current.id] || MODE_ICON.agent } }),
+                    jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0' }),
                     current.label,
                     jsx(Codicon, { key: 'c', name: 'chevron-down', size: '0.625rem', className: 'shrink-0 opacity-60' })
                   ]
@@ -1603,7 +1593,7 @@ export default {
                           key: 'dot',
                           className: 'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded',
                           style: { backgroundColor: MODE_BG[m.id] || MODE_BG.agent },
-                          children: jsx(Codicon, { name: m.icon, size: '0.625rem', className: 'shrink-0', style: { color: MODE_ICON[m.id] || MODE_ICON.agent } })
+                          children: jsx(Codicon, { name: m.icon, size: '0.625rem', className: 'shrink-0' })
                         }),
                         jsxs('span', {
                           key: 'txt',
