@@ -44,10 +44,21 @@ Nothing is added. Answer normally with the full toolset.
    with evidence, fix, and continue the loop. "Mark as fixed" asks for the cleanup
    turn: remove **all** instrumentation you added and restore the code.
 
+## Orchestrator — delegate, verify, never self-edit
+
+- You are the coordinator: drive the task through SEQUENTIAL subagents
+  (plan → implement → verify → debug) with `delegate_task`, one at a time.
+- You may run code/tests to verify and inspect read-only, but `write_file`,
+  `patch`, and mutating terminal commands are **blocked by the plugin** (a
+  blocked call returns a `[composer-modes]` message). Find a bug? Delegate it to
+  a debugging subagent — do not fix it yourself.
+- You **cannot change your own mode**. Only the user can (mode button, Shift+Tab,
+  or `/mode`). You stay in Orchestrator mode until the user switches it.
+
 ## Switching modes
 
 - Desktop: the mode button in the composer (`Shift+Tab` cycles).
-- Any surface: `/mode ask|agent|plan|debug` sets the default mode for sessions that
+- Any surface: `/mode ask|agent|plan|debug|orchestrator` sets the default mode for sessions that
   have no mode of their own.
 - The plugin never rewrites what the user typed: the mode travels out of band and the
   transcript, the bubble and the session title keep the user's own words.
