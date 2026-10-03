@@ -33,6 +33,8 @@ __all__ = [
     "ask_block_message",
     "plan_enforcement_enabled",
     "plan_block_message",
+    "orchestrator_enforcement_enabled",
+    "orchestrator_block_message",
 ]
 
 #: Tools that always change state, whatever their arguments look like.
@@ -247,5 +249,96 @@ def plan_block_message(tool_name: str, args: object) -> str | None:
             f"[composer-modes] Plan mode is read-only except the plan files: the tool '{name}' can "
             f"change state, so the call was blocked before it ran. Nothing was written. Only the "
             f"plan markdown and questions JSON under {PLAN_DIR}/ may be written." + door_out
+        )
+    return None
+
+
+# ── Orchestrator mode ────────────────────────────────────────────────────────
+# The orchestrator coordinates subagents. It MAY delegate (delegate_task), run
+# code/tests/builds (terminal) to verify, and inspect (read-only). It must NOT
+# author: no file writes/deletes/moves, no package installs, no git mutations,
+# no service control, no privilege escalation.
+
+#: The one state-changing tool orchestrator mode may call.
+_ORCH_DELEGATE_TOOL = "delegate_task"
+
+#: Hard mutations orchestrator mode must never run. This is the mutating-token
+#: list MINUS the execution subcommands (npm test / npm run / python -c /
+#: node -e / cargo test / go test / ...) so the orchestrator can still run the
+#: code and tests it is verifying.
+_ORCH_HARD_MUTATING_RE = re.compile(
+    r"(?:>>?|\|\s*tee\b|\btee\b|\bdd\b|\btruncate\b|\bshred\b|\bchmod\b|\bchown\b|\bchgrp\b|"
+    r"\bumask\b|\bln\b|\bmv\b|\bcp\b|\brm\b|\brmdir\b|\bmkdir\b|\btouch\b|\binstall\b|\brsync\b|"
+    r"\bscp\b|\bsed\s+-i|\bperl\s+-i|"
+    r"-delete\b|-exec\b|-execdir\b|-ok\b|-fprint|"
+    r"\bsystemctl\s+(?:start|stop|restart|enable|disable)\b|\bservice\b|"
+    r"\bgit\s+(?:add|commit|push|pull|fetch|merge|rebase|checkout|switch|restore|reset|clean|apply|am|cherry-pick|"
+    r"stash(?!\s+list)|tag\s+-|remote\s+(?:add|remove|set-url)|init|clone|config\s+(?!--get|--list))|"
+    r"\bnpm\s+(?:i|install|ci)\b|"
+    r"\bpnpm\s+(?:i|install|add|remove)\b|\byarn\s+(?:add|install)\b|"
+    r"\bpip3?\s+(?:install|uninstall|download)\b|\buv\s+(?:pip|sync|add|remove)\b|"
+    r"\bcargo\s+(?:install|add|remove)\b|\bgo\s+(?:install|mod)\b|"
+    r"\bdocker\s+(?:run|build|exec|rm|stop|start|compose\s+(?:up|down|build|run))\b|"
+    r"\bkubectl\s+(?:apply|delete|create|edit|exec|patch|scale|rollout)\b|"
+    r"\bgh\s+(?:pr\s+(?:create|merge|close|comment|edit|checkout)|issue\s+(?:create|close|comment|edit)|"
+    r"release\s+create|repo\s+(?:create|delete|clone|fork)|workflow\s+run)\b|"
+    r"\bhermes\s+(?:plugins\s+(?:install|remove|enable|disable|update)|cron|config\s+set|update)\b|"
+    r"\bsudo\b|\bsu\b|\bdel\b|\berase\b|\brd\s+/|\bren\b)"
+)
+
+
+def _orchestrator_terminal_allowed(command: str) -> bool:
+    """True when *command* is safe for orchestrator mode.
+
+    The orchestrator may run code/tests/builds and inspect, but must not mutate
+    the workspace. Hard mutations (file writes, package installs, git mutations,
+    service control, privilege escalation) are blocked; everything else —
+    running the project's code and tests, plus read-only inspection — is allowed.
+    """
+    if not command.strip():
+        return False
+    return _ORCH_HARD_MUTATING_RE.search(command) is None
+
+
+def orchestrator_enforcement_enabled() -> bool:
+    """Orchestrator-mode enforcement is on unless explicitly switched off."""
+    return str(os.environ.get("HERMES_COMPOSER_MODES_ORCHESTRATE_ENFORCE", "1")).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def orchestrator_block_message(tool_name: str, args: object) -> str | None:
+    """The block message for a tool call orchestrator mode must refuse, or ``None``."""
+    if not orchestrator_enforcement_enabled():
+        return None
+    if not tool_name:
+        return None
+    name = str(tool_name)
+    door_out = (
+        " If the request needs code changed, delegate it to a subagent with delegate_task, or "
+        "tell the user to re-ask in Agent mode."
+    )
+    if name == _ORCH_DELEGATE_TOOL:
+        return None
+    if name == "terminal":
+        command = ""
+        if isinstance(args, dict):
+            command = str(args.get("command") or "")
+        if _orchestrator_terminal_allowed(command):
+            return None
+        return (
+            f"[composer-modes] Orchestrator mode may run code and tests but not mutate the "
+            f"workspace: the terminal command was blocked because it writes/deletes/moves files, "
+            f"installs packages, or mutates git. Run the code/tests to verify, inspect with "
+            f"read-only commands, and delegate any needed code change to a subagent." + door_out
+        )
+    if name in DENY_TOOLS or _MUTATING_NAME_RE.search(name):
+        return (
+            f"[composer-modes] Orchestrator mode may run code and delegate, but not edit: the "
+            f"tool '{name}' changes state, so the call was blocked before it ran. Nothing was "
+            f"written. Delegate the code change to a subagent with delegate_task." + door_out
         )
     return None
