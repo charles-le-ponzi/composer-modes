@@ -129,14 +129,16 @@ import {
   Codicon,
   haptic,
   host,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Streamdown,
   Textarea,
-  Tip,
   TRANSCRIPT_DIRECTIVE_AREA,
   useValue
 } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 const ID = 'composer-modes'
 const VER = 'v13.1'
@@ -1483,11 +1485,14 @@ export default {
       probe(`dispose boot=${BOOT}`)
     })
 
-    // ── Single mode button in the composer bar ──
+    // ── Mode dropdown in the composer bar ──
     function ModeButton() {
       const mode = useValue(activeMode)
       const sid = useValue(host.state.focusedSessionId)
       const current = MODES.find((m) => m.id === mode) || MODES[0]
+      const [open, setOpen] = useState(false)
+      // Set on a pick; the effect below closes the menu after the mode lands.
+      const pendingClose = useRef(false)
 
       // Reset on new session. D1 (advice MODEB-V10): birth from a draft
       // (null to id) is NOT a new session — choosing a mode in a draft survives
@@ -1504,34 +1509,115 @@ export default {
         }
       }, [sid])
 
-      return jsxs('div', {
-        className: 'flex shrink-0 items-center gap-0.5',
-        children: [
-          jsx(Tip, {
-            key: 'mode',
-            label: `${current.hint} · click or Shift+Tab: Ask → Agent → Plan → Debug · ${VER}·${BOOT}`,
-            children: jsxs('button', {
-              type: 'button',
-              'data-mode': current.id,
-              'aria-label': `${current.label} mode — click or Shift+Tab to change`,
-              className: cn(
-                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[0.6875rem] font-medium transition-opacity',
-                'hover:opacity-90'
-              ),
-              style: {
-                backgroundColor: MODE_BG[current.id] || MODE_BG.agent,
-                color: 'var(--ui-text-primary)'
-              },
-              onClick: cycleMode,
-              children: [
-                jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0' }),
-                current.label,
-                jsx(Codicon, { key: 'c', name: 'chevron-down', size: '0.625rem', className: 'shrink-0 opacity-60' })
-              ]
+      // Close the menu after a pick lands (applyMode re-renders us; do it here
+      // so the re-render can't clobber the close).
+      useEffect(() => {
+        if (pendingClose.current) {
+          pendingClose.current = false
+          setOpen(false)
+        }
+      }, [mode])
+
+      const pick = (id) => {
+        if (id === mode) {
+          setOpen(false)
+          return
+        }
+        pendingClose.current = true
+        applyMode(ctx, id)
+      }
+
+      return jsx(
+        Popover,
+        {
+          key: 'mode-pop',
+          open,
+          onOpenChange: setOpen,
+          children: [
+            jsx(
+              PopoverTrigger,
+              {
+                key: 'trig',
+                asChild: true,
+                children: jsxs('button', {
+                  type: 'button',
+                  'data-mode': current.id,
+                  'aria-haspopup': 'menu',
+                  'aria-expanded': open,
+                  'aria-label': `${current.label} mode — click to choose a mode, or Shift+Tab to cycle`,
+                  className: cn(
+                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[0.6875rem] font-medium transition-opacity',
+                    'hover:opacity-90'
+                  ),
+                  style: {
+                    backgroundColor: MODE_BG[current.id] || MODE_BG.agent,
+                    color: 'var(--ui-text-primary)'
+                  },
+                  children: [
+                    jsx(Codicon, { key: 'i', name: current.icon, size: '0.75rem', className: 'shrink-0' }),
+                    current.label,
+                    jsx(Codicon, { key: 'c', name: 'chevron-down', size: '0.625rem', className: 'shrink-0 opacity-60' })
+                  ]
+                })
+              }
+            ),
+            jsx(PopoverContent, {
+              key: 'content',
+              align: 'end',
+              side: 'bottom',
+              variant: 'menu',
+              className: 'w-60 p-1',
+              children: jsxs('div', {
+                role: 'menu',
+                'aria-label': 'Composer mode',
+                children: MODES.map((m) => {
+                  const selected = m.id === mode
+                  return jsx(
+                    'button',
+                    {
+                      key: m.id,
+                      type: 'button',
+                      role: 'menuitemradio',
+                      'aria-checked': selected,
+                      'data-mode': m.id,
+                      onClick: () => pick(m.id),
+                      className: cn(
+                        'flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-[0.75rem] outline-none',
+                        'hover:bg-(--ui-control-active-background)'
+                      ),
+                      children: [
+                        jsx('span', {
+                          key: 'dot',
+                          className: 'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded',
+                          style: { backgroundColor: MODE_BG[m.id] || MODE_BG.agent },
+                          children: jsx(Codicon, { name: m.icon, size: '0.625rem', className: 'shrink-0' })
+                        }),
+                        jsxs('span', {
+                          key: 'txt',
+                          className: 'min-w-0 flex-1',
+                          children: [
+                            jsx('span', {
+                              className: 'block font-medium text-(--ui-text-primary)',
+                              children: m.label
+                            }),
+                            jsx('span', {
+                              className: 'block truncate text-(--ui-text-secondary) opacity-70',
+                              children: m.hint
+                            })
+                          ]
+                        }),
+                        selected
+                          ? jsx(Codicon, { key: 'ck', name: 'check', size: '0.75rem', className: 'mt-0.5 shrink-0' })
+                          : null
+                      ]
+                    }
+                  )
+                })
+              })
             })
-          })
-        ]
-      })
+          ]
+        }
+      )
     }
 
     ctx.register({
