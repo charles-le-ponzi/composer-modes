@@ -22,11 +22,17 @@ __all__ = [
 ]
 
 #: Every mode the composer can be in. ``agent`` is the neutral pass-through.
-MODE_IDS = ("ask", "agent", "plan", "debug")
+MODE_IDS = ("ask", "agent", "plan", "debug", "orchestrator")
 
 DEFAULT_MODE = "agent"
 
-LABELS = {"ask": "Ask", "agent": "Agent", "plan": "Plan", "debug": "Debug"}
+LABELS = {
+    "ask": "Ask",
+    "agent": "Agent",
+    "plan": "Plan",
+    "debug": "Debug",
+    "orchestrator": "Orchestrator",
+}
 
 # A leading slash command wins over any mode: an explicit ``/plan`` (or any other
 # slash command) must never carry a mode note, or the note lands as an argument of
@@ -177,4 +183,25 @@ DEBUG_NOTE = (
     "you added and restore the code to its clean state."
 )
 
-NOTES = {"ask": ASK_NOTE, "plan": PLAN_NOTE, "debug": DEBUG_NOTE}
+ORCH_NOTE = (
+    "[mode:orchestrator] ORCHESTRATOR MODE — you are the coordinator, not the "
+    "worker. Drive the task through SEQUENTIAL subagents, ONE AT A TIME, using "
+    "the delegate_task tool: (1) PLAN — delegate a planning subagent to produce "
+    "a step-by-step plan; (2) IMPLEMENT — delegate an implementation subagent to "
+    "build it; (3) VERIFY — you run the code and tests yourself (terminal) to "
+    "check the result; (4) DEBUG — if verification fails, delegate a debugging "
+    "subagent to find and fix the root cause, then return to VERIFY. Repeat "
+    "VERIFY/DEBUG until it passes, then synthesize a single clear final answer "
+    "for the user. What you MAY do: delegate via delegate_task, run code/tests/"
+    "builds in the terminal to verify, and use read-only tools to inspect. What "
+    "you must NOT do: edit code yourself — write_file and patch are BLOCKED, and "
+    "so are terminal commands that write, delete or move files, install packages, "
+    "or mutate git (those are BLOCKED by the runtime). If you find a problem, do "
+    "not fix it yourself — delegate it to a debugging subagent. You CANNOT change "
+    "your own mode: only the user can (via the mode button or /mode); you stay in "
+    "Orchestrator mode until the user switches it. Subagent summaries are "
+    "self-reports — verify important results yourself (read-only tools or by "
+    "running the code) before stating them as done."
+)
+
+NOTES = {"ask": ASK_NOTE, "plan": PLAN_NOTE, "debug": DEBUG_NOTE, "orchestrator": ORCH_NOTE}
